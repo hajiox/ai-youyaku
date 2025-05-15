@@ -2,23 +2,22 @@
 
 import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Toast } from "@/components/ui/toast"
 
 export default function Home() {
-  const [url, setUrl] = useState("")
+  const [text, setText] = useState("")
   const [loading, setLoading] = useState(false)
   const [resultShort, setResultShort] = useState("")
   const [resultLong, setResultLong] = useState("")
   const [error, setError] = useState("")
   const [toast, setToast] = useState({ show: false, message: "" })
-  const inputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const fetchSummaries = async () => {
-    // URLが空の場合はエラー
-    if (!url) {
-      setError("URLを入力してください")
+    // テキストが空の場合はエラー
+    if (!text.trim()) {
+      setError("記事本文を入力してください")
       return
     }
 
@@ -30,8 +29,8 @@ export default function Home() {
     try {
       // 2つのAPIリクエストを同時に実行
       const [shortResponse, longResponse] = await Promise.all([
-        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=short`),
-        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=long`),
+        fetch(`/api/summary?text=${encodeURIComponent(text)}&mode=short`),
+        fetch(`/api/summary?text=${encodeURIComponent(text)}&mode=long`),
       ])
 
       // レスポンスをJSON形式で取得
@@ -81,13 +80,12 @@ export default function Home() {
         <h1 className="text-3xl md:text-4xl font-bold text-center mb-8">AI記事要約.com</h1>
 
         <div className="mb-6">
-          <Input
-            ref={inputRef}
-            type="text"
-            placeholder="記事URLを入力"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            className="mb-4"
+          <textarea
+            ref={textareaRef}
+            placeholder="ここに記事本文を貼り付けてください"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            className="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[200px] mb-4"
           />
 
           <div className="flex justify-center">

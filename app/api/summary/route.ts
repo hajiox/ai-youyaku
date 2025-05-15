@@ -3,12 +3,12 @@ import { type NextRequest, NextResponse } from "next/server"
 export async function GET(request: NextRequest) {
   // URLからクエリパラメータを取得
   const searchParams = request.nextUrl.searchParams
-  const url = searchParams.get("url")
+  const text = searchParams.get("text")
   const mode = searchParams.get("mode")
 
-  // URLが無い場合はエラー
-  if (!url) {
-    return NextResponse.json({ error: "Missing url" }, { status: 400 })
+  // テキストが無い場合はエラー
+  if (!text) {
+    return NextResponse.json({ error: "Missing text" }, { status: 400 })
   }
 
   // モードが不正な場合はエラー
@@ -24,7 +24,10 @@ export async function GET(request: NextRequest) {
     }
 
     // プロンプトの設定
-    const prompt = mode === "short" ? `このURLの記事を200文字で要約: ${url}` : `このURLの記事を1000文字で要約: ${url}`
+    const prompt =
+      mode === "short"
+        ? `以下の文章を200文字で要約してください\n\n${text}`
+        : `以下の文章を1000文字で要約してください\n\n${text}`
 
     // OpenAI APIへのリクエスト
     const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -38,8 +41,7 @@ export async function GET(request: NextRequest) {
         messages: [
           {
             role: "system",
-            content:
-              "あなたはウェブ記事を要約する専門家です。URLから記事を抽出し、指定された文字数で要約してください。",
+            content: "あなたは文章を要約する専門家です。指定された文字数で要約してください。",
           },
           {
             role: "user",
