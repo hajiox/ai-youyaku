@@ -1,72 +1,38 @@
-import { type NextRequest, NextResponse } from "next/server"
+// app/api/summary/route.ts
 
-export async function GET(request: NextRequest) {
-  // URLからクエリパラメータを取得
-  const searchParams = request.nextUrl.searchParams
-  const url = searchParams.get("url")
-  const mode = searchParams.get("mode")
+import { NextResponse } from "next/server";
+import OpenAI from "@ai-sdk/openai";
+import { generateText } from "ai";
 
-  // URLが無い場合はエラー
-  if (!url) {
-    return NextResponse.json({ error: "URLを入力してください" }, { status: 400 })
-  }
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const url = searchParams.get("url");
+  const mode = searchParams.get("mode");
 
-  // モードが不正な場合はエラー
-  if (mode !== "short" && mode !== "long") {
-    return NextResponse.json({ error: "無効なモードです" }, { status: 400 })
+  if (!url || !mode || (mode !== "short" && mode !== "long")) {
+    return NextResponse.json(
+      { error: "Invalid request. Please provide url and mode (short or long)." },
+      { status: 400 }
+    );
   }
 
   try {
-    // OpenAI APIキーの取得
-    const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) {
-      throw new Error("OpenAI APIキーが設定されていません")
-    }
+    const prompt = mode === "short"
+      ? `次のWeb記事の要点を200文字以内で簡潔にまとめてください。記事URL: ${url}`
+      : `次のWeb記事の要点を1000文字以内で詳細にまとめてください。記事URL: ${url}`;
 
-    // プロンプトの設定
-    const prompt =
-      mode === "short"
-        ? `次のURLの記事を200文字以内で要約してください: ${url}`
-        : `次のURLの記事を1000文字以内で要約してください: ${url}`
+    const openai = new OpenAI();
+    const { text } = await generateText({
+      model: openai("gpt-4o"),
+      prompt
+    });
 
-    // OpenAI APIへのリクエスト
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content:
-              "あなたはウェブ記事を要約する専門家です。URLから記事を抽出し、指定された文字数で要約してください。",
-          },
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-        temperature: 0.7,
-      }),
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(`OpenAI API error: ${JSON.stringify(errorData)}`)
-    }
-
-    const data = await response.json()
-    const summary = data.choices[0].message.content.trim()
-
-    return NextResponse.json({ result: summary })
+    return NextResponse.json({ result: text });
   } catch (error) {
-    console.error("Error generating summary:", error)
+    console.error("API error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "要約の生成中にエラーが発生しました" },
-      { status: 500 },
-    )
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
