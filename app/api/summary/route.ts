@@ -1,6 +1,6 @@
 // app/api/summary/route.ts
 
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server"; // NextRequest は使っていないのでこのままでOK
 
 export const runtime = "edge"; // Edgeランタイムで動作
 
@@ -59,10 +59,10 @@ async function fetchUrlContent(url: string): Promise<string | null> {
   }
 }
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
+export async function GET(req: Request) { // req の型は Request のまま
+  const { searchParams } = new URL(req.url); // searchParams (キャメルケース) を取得
   const urlToSummarize = searchParams.get("url");
-  const mode = search_params.get("mode"); // ★修正: searchParamsのtypoを修正
+  const mode = searchParams.get("mode"); // ★★★★★ここを修正しました！ search_params -> searchParams ★★★★★
 
   if (!urlToSummarize || !mode || (mode !== "short" && mode !== "long")) {
     return NextResponse.json(
@@ -84,7 +84,6 @@ export async function GET(req: Request) {
   // 2. OpenAIに送信するプロンプトを作成
   // 注意: OpenAIは文字数ではなくトークン数でカウントします。これはあくまで目安です。
   const targetLengthDescription = mode === "short" ? "200文字程度の短い" : "1000文字程度の詳細な";
-  // ★修正: 以前のmaxCharsは使われていなかったので、modeに基づいて指示を変更
   const prompt = `以下のテキスト内容を日本語で${targetLengthDescription}要約にしてください。\n\nテキスト:\n${webContent}`;
 
   try {
@@ -113,7 +112,7 @@ export async function GET(req: Request) {
     }
 
     const data = await apiRes.json();
-    // ★修正: data.choicesが空配列の場合や、messageが存在しない場合も考慮
+    // data.choicesが空配列の場合や、messageが存在しない場合も考慮
     const text = data.choices?.[0]?.message?.content?.trim() || "";
 
     if (!text) {
@@ -127,6 +126,11 @@ export async function GET(req: Request) {
     return NextResponse.json({ result: text });
   } catch (err) {
     console.error("APIハンドラエラー:", err);
+    // エラーオブジェクトの内容をもう少し詳しくログに出力するとデバッグに役立ちます
+    if (err instanceof Error) {
+        console.error("エラーメッセージ:", err.message);
+        console.error("スタックトレース:", err.stack);
+    }
     return NextResponse.json(
       { error: "サーバー内部エラーが発生しました。" },
       { status: 500 }
