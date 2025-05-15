@@ -8,29 +8,28 @@ export default function Home() {
   const [url, setUrl] = useState("");
   const [shortSummary, setShortSummary] = useState("");
   const [longSummary, setLongSummary] = useState("");
-  const [isLoading, setIsLoading] = useState(false); // ローディング状態
-  const [error, setError] = useState<string | null>(null); // エラーメッセージ
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSummarize = async () => {
+    // ... (前回のコードと同じ)
     if (!url) {
       alert("URLを入力してください");
       return;
     }
-    if (isLoading) return; // ローディング中は処理しない
+    if (isLoading) return;
 
     setIsLoading(true);
-    setError(null); // 前のエラーをクリア
-    setShortSummary(""); // 前回のショート要約をクリア
-    setLongSummary(""); // 前回のロング要約をクリア
+    setError(null);
+    setShortSummary("");
+    setLongSummary("");
 
     try {
-      // Promise.allで並行してAPIを呼び出す
       const [shortRes, longRes] = await Promise.all([
         fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=short`),
         fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=long`),
       ]);
 
-      // エラーハンドリングを各レスポンスで行う
       if (!shortRes.ok) {
         const errorData = await shortRes.json().catch(() => ({ result: "200文字要約の取得に失敗しました" }));
         throw new Error(errorData.result || `200文字要約エラー: ${shortRes.status}`);
@@ -49,7 +48,6 @@ export default function Home() {
     } catch (err: any) {
       console.error(err);
       setError(err.message || "要約中に不明なエラーが発生しました");
-      // エラー時は要約結果を空にする（既にクリアされているが念のため）
       setShortSummary("");
       setLongSummary("");
     } finally {
@@ -58,10 +56,11 @@ export default function Home() {
   };
 
   const copyText = (text: string) => {
-    if (!text) return; // 空のテキストはコピーしない
+    // ... (前回のコードと同じ)
+    if (!text) return;
     navigator.clipboard.writeText(text)
       .then(() => {
-        alert("コピーしました！"); // ユーザーにフィードバック
+        alert("コピーしました！");
       })
       .catch(err => {
         console.error("コピーに失敗しました: ", err);
@@ -70,83 +69,89 @@ export default function Home() {
   };
 
   const handleReset = () => {
+    // ... (前回のコードと同じ)
     setUrl("");
     setShortSummary("");
     setLongSummary("");
     setError(null);
-    setIsLoading(false); // ローディング中だった場合もリセット
+    setIsLoading(false);
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-gray-100 text-gray-800">
-      <div className="bg-white p-6 md:p-8 rounded-lg shadow-xl w-full max-w-2xl">
-        <h1 className="text-3xl font-bold mb-6 text-center text-blue-600">AI記事要約.com</h1>
-        <div className="mb-4">
+    <main className="flex min-h-screen flex-col items-center justify-center p-4 sm:p-6 bg-gradient-to-br from-slate-100 to-sky-100 text-slate-800 font-sans">
+      <div className="bg-white p-6 sm:p-8 rounded-xl shadow-2xl w-full max-w-2xl transform transition-all duration-500 hover:scale-[1.01]">
+        <h1 className="text-4xl sm:text-5xl font-bold mb-8 text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-sky-500">
+          AI記事要約.com
+        </h1>
+        <div className="mb-6">
           <input
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="記事URLを入力"
-            className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
-            disabled={isLoading} // ローディング中は無効化
+            placeholder="記事URLを入力してください"
+            className="w-full text-lg p-4 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow shadow-sm placeholder-slate-400"
+            disabled={isLoading}
           />
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 mb-6">
+        <div className="flex flex-col sm:flex-row gap-3 mb-8">
           <button
             onClick={handleSummarize}
-            className={`w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-md font-semibold hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-              isLoading ? "opacity-50 cursor-not-allowed" : ""
+            className={`w-full sm:flex-1 px-6 py-3.5 bg-blue-600 text-white text-lg rounded-lg font-semibold hover:bg-blue-700 active:bg-blue-800 transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shadow-md hover:shadow-lg active:scale-95 ${
+              isLoading ? "opacity-60 cursor-not-allowed" : ""
             }`}
-            disabled={isLoading} // ローディング中は無効化
+            disabled={isLoading}
           >
             {isLoading ? "要約中..." : "要約する"}
           </button>
           <button
             onClick={handleReset}
-            className="w-full sm:w-auto px-6 py-3 bg-gray-500 text-white rounded-md font-semibold hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
-            disabled={isLoading && !url && !shortSummary && !longSummary && !error} // 完全に初期状態なら無効でも良いかも
+            className="w-full sm:w-auto px-6 py-3.5 bg-slate-500 text-white text-lg rounded-lg font-semibold hover:bg-slate-600 active:bg-slate-700 transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 shadow-md hover:shadow-lg active:scale-95"
+            disabled={isLoading && !url && !shortSummary && !longSummary && !error}
           >
             リセット
           </button>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
-            <p className="font-semibold">エラー:</p>
-            <p>{error}</p>
+          <div className="mb-6 p-4 bg-red-50 border border-red-300 text-red-700 rounded-lg shadow-sm">
+            <p className="font-semibold text-lg">エラーが発生しました:</p>
+            <p className="mt-1">{error}</p>
           </div>
         )}
 
         {shortSummary && (
-          <div className="mt-6 p-4 border border-gray-300 rounded-md bg-gray-50 shadow">
-            <div className="flex justify-between items-center mb-2">
-              <h2 className="text-xl font-semibold text-blue-700">200文字要約</h2>
+          <div className="mt-8 p-5 border border-slate-200 rounded-lg bg-slate-50 shadow-lg">
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-2xl font-semibold text-blue-700">200文字要約</h2>
               <button
                 onClick={() => copyText(shortSummary)}
-                className="text-sm text-white bg-black px-3 py-1 rounded-md hover:bg-gray-800 transition-colors"
+                className="text-sm text-white bg-slate-700 px-4 py-2 rounded-md hover:bg-slate-800 active:bg-slate-900 transition-colors active:scale-95 shadow"
               >
-                Copy
+                コピー
               </button>
             </div>
-            <p className="mb-2 text-gray-700 whitespace-pre-wrap break-words">{shortSummary}</p>
+            <p className="mb-2 text-slate-700 text-base leading-relaxed whitespace-pre-wrap break-words">{shortSummary}</p>
           </div>
         )}
 
         {longSummary && (
-          <div className="mt-6 p-4 border border-gray-300 rounded-md bg-gray-50 shadow">
-            <div className="flex justify-between items-center mb-2">
-              <h2 className="text-xl font-semibold text-blue-700">1000文字要約</h2>
+          <div className="mt-8 p-5 border border-slate-200 rounded-lg bg-slate-50 shadow-lg">
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-2xl font-semibold text-blue-700">1000文字要約</h2>
               <button
                 onClick={() => copyText(longSummary)}
-                className="text-sm text-white bg-black px-3 py-1 rounded-md hover:bg-gray-800 transition-colors"
+                className="text-sm text-white bg-slate-700 px-4 py-2 rounded-md hover:bg-slate-800 active:bg-slate-900 transition-colors active:scale-95 shadow"
               >
-                Copy
+                コピー
               </button>
             </div>
-            <p className="mb-2 text-gray-700 whitespace-pre-wrap break-words">{longSummary}</p>
+            <p className="mb-2 text-slate-700 text-base leading-relaxed whitespace-pre-wrap break-words">{longSummary}</p>
           </div>
         )}
       </div>
+      <footer className="text-center mt-12 text-slate-500 text-sm">
+        <p>© {new Date().getFullYear()} AI記事要約.com. All rights reserved.</p>
+      </footer>
     </main>
   );
 }
