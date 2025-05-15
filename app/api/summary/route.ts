@@ -24,10 +24,7 @@ export async function GET(request: NextRequest) {
     }
 
     // プロンプトの設定
-    const prompt =
-      mode === "short"
-        ? `この URL の記事本文を抽出し、200文字以内で要約してください: ${url}`
-        : `この URL の記事本文を抽出し、1000文字以内で要約してください: ${url}`
+    const prompt = mode === "short" ? `このURLの記事を200文字で要約: ${url}` : `このURLの記事を1000文字で要約: ${url}`
 
     // OpenAI APIへのリクエスト
     const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {

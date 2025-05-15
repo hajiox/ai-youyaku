@@ -4,48 +4,63 @@ import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
+import { Toast } from "@/components/ui/toast"
 
 export default function Home() {
   const [url, setUrl] = useState("")
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState("")
-  const [error, setError] = useState(false)
+  const [resultShort, setResultShort] = useState("")
+  const [resultLong, setResultLong] = useState("")
+  const [error, setError] = useState("")
+  const [toast, setToast] = useState({ show: false, message: "" })
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const fetchSummary = async (mode: "short" | "long") => {
+  const fetchSummaries = async () => {
+    // URLが空の場合はエラー
     if (!url) {
-      setError(true)
-      setResult("")
+      setError("URLを入力してください")
       return
     }
 
     setLoading(true)
-    setError(false)
-    setResult("")
+    setError("")
+    setResultShort("")
+    setResultLong("")
 
     try {
-      const response = await fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=${mode}`)
-      const data = await response.json()
+      // 2つのAPIリクエストを同時に実行
+      const [shortResponse, longResponse] = await Promise.all([
+        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=short`),
+        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=long`),
+      ])
 
-      if (!response.ok) {
-        throw new Error(data.error || "エラーが発生しました")
+      // レスポンスをJSON形式で取得
+      const shortData = await shortResponse.json()
+      const longData = await longResponse.json()
+
+      // エラーチェック
+      if (!shortResponse.ok || !longResponse.ok) {
+        throw new Error(shortData.error || longData.error || "要約取得に失敗しました")
       }
 
-      setResult(data.result)
+      // 結果を設定
+      setResultShort(shortData.result)
+      setResultLong(longData.result)
     } catch (err) {
-      console.error("Error fetching summary:", err)
-      setError(true)
+      console.error("Error fetching summaries:", err)
+      setError("要約取得に失敗しました")
     } finally {
       setLoading(false)
     }
   }
 
-  const copyToClipboard = () => {
-    if (result) {
+  const copyToClipboard = (text: string) => {
+    if (text) {
       navigator.clipboard
-        .writeText(result)
+        .writeText(text)
         .then(() => {
-          alert("クリップボードにコピーしました")
+          setToast({ show: true, message: "コピーしました" })
+          setTimeout(() => setToast({ show: false, message: "" }), 3000)
         })
         .catch((err) => {
           console.error("クリップボードへのコピーに失敗しました:", err)
@@ -75,27 +90,21 @@ export default function Home() {
             className="mb-4"
           />
 
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button onClick={() => fetchSummary("short")} disabled={loading} className="flex-1">
-              200文字（X用）要約
-            </Button>
-            <Button onClick={() => fetchSummary("long")} disabled={loading} className="flex-1">
-              1000文字（ブログ用）要約
+          <div className="flex justify-center">
+            <Button onClick={fetchSummaries} disabled={loading} className="px-8">
+              {loading ? <Spinner className="mr-2" /> : null}
+              要約する
             </Button>
           </div>
         </div>
 
-        {loading && (
-          <div className="flex justify-center my-6">
-            <Spinner />
-          </div>
-        )}
+        {error && <div className="text-red-500 text-center my-6">{error}</div>}
 
-        {result && !error && (
-          <div className="bg-gray-50 p-4 rounded-lg mb-8">
+        {resultShort && (
+          <div className="bg-gray-50 p-4 rounded-lg mb-4">
             <div className="flex justify-between items-start mb-2">
-              <h2 className="font-semibold">要約結果:</h2>
-              <Button variant="outline" size="sm" onClick={copyToClipboard} className="ml-2">
+              <h2 className="font-semibold">200文字要約:</h2>
+              <Button variant="outline" size="sm" onClick={() => copyToClipboard(resultShort)}>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   width="16"
@@ -114,12 +123,35 @@ export default function Home() {
                 Copy
               </Button>
             </div>
-            <p className="whitespace-pre-wrap">{result}</p>
+            <p className="whitespace-pre-wrap">{resultShort}</p>
           </div>
         )}
 
-        {error && (
-          <div className="text-red-500 text-center my-6">要約に失敗しました。URL とモードを確認してください</div>
+        {resultLong && (
+          <div className="bg-gray-50 p-4 rounded-lg mb-8">
+            <div className="flex justify-between items-start mb-2">
+              <h2 className="font-semibold">1000文字要約:</h2>
+              <Button variant="outline" size="sm" onClick={() => copyToClipboard(resultLong)}>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="mr-1"
+                >
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                Copy
+              </Button>
+            </div>
+            <p className="whitespace-pre-wrap">{resultLong}</p>
+          </div>
         )}
 
         <div className="mt-12">
@@ -139,6 +171,8 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {toast.show && <Toast message={toast.message} />}
     </main>
   )
 }
