@@ -1,11 +1,11 @@
 // app/page.tsx
 
-"use client"; // クライアントコンポーネントである必要があります
+"use client";
 
-import { useState } from "react";
-// import { Metadata } from 'next'; // ← metadataはlayout.tsxで管理するので不要
+import { useState, useEffect } from "react"; // useEffect をインポート
+// import { Metadata } from 'next'; // layout.tsx で管理
 
-// メタデータ定義は app/layout.tsx に移動したので、ここでは削除します
+// メタデータ定義は app/layout.tsx に移動
 
 export default function Home() {
   const [url, setUrl] = useState("");
@@ -14,8 +14,10 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [processedInfo, setProcessedInfo] = useState<{truncated: boolean, originalLength: number, processedLength: number} | null>(null);
+  const [showContactModal, setShowContactModal] = useState(false); // ★連絡フォームモーダルの表示状態
 
   const handleSummarize = async (selectedTone: "casual" | "formal") => {
+    // ... (前回と同じ)
     if (!url) {
       alert("URLを入力してください");
       return;
@@ -36,7 +38,7 @@ export default function Home() {
 
       let shortError = null;
       let longError = null;
-      let shortData: any = {}; // APIからの型が不明なためanyで受けていますが、理想は型定義
+      let shortData: any = {};
       let longData: any = {};
 
       if (!shortRes.ok) {
@@ -86,6 +88,7 @@ export default function Home() {
   };
 
   const copyText = (text: string) => {
+    // ... (前回と同じ)
     if (!text) return;
     navigator.clipboard.writeText(text)
       .then(() => {
@@ -98,6 +101,7 @@ export default function Home() {
   };
 
   const handleReset = () => {
+    // ... (前回と同じ)
     setUrl("");
     setShortSummary("");
     setLongSummary("");
@@ -105,6 +109,20 @@ export default function Home() {
     setIsLoading(false);
     setProcessedInfo(null);
   };
+
+  // ★ モーダル表示時に背景スクロールを禁止する (任意)
+  useEffect(() => {
+    if (showContactModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    // クリーンアップ関数
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [showContactModal]);
+
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-slate-50 text-slate-700 font-sans">
@@ -170,6 +188,7 @@ export default function Home() {
           </div>
         )}
 
+        {/* ... (要約結果表示は前回と同じ) ... */}
         {shortSummary && (
           <div className="mt-6 p-4 border border-slate-200 rounded-md bg-white">
             <div className="flex justify-between items-center mb-2">
@@ -200,9 +219,55 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* ★ フッター */}
       <footer className="text-center mt-8 text-xs text-slate-400">
-        <p>© {new Date().getFullYear()} AI記事要約.com</p>
+        <p className="mb-1">
+          <button
+            onClick={() => setShowContactModal(true)} // ★ モーダル表示ボタン
+            className="hover:underline focus:outline-none"
+          >
+            ご連絡はこちら
+          </button>
+        </p>
+        <p className="mb-1 text-[10px] leading-tight px-2"> {/* 文字をさらに小さく、行間を詰める */}
+          当サイトは、Amazon.co.jpを宣伝しリンクすることによってサイトが紹介料を獲得できる手段を提供することを目的に設定されたアフィリエイトプログラムである、Amazonアソシエイト・プログラムの参加者です。
+        </p>
+        <p className="mt-1">© {new Date().getFullYear()} AI記事要約.com</p>
       </footer>
+
+      {/* ★ 連絡先モーダル (超シンプル版: mailtoリンク) */}
+      {showContactModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-slate-700">ご連絡</h2>
+              <button
+                onClick={() => setShowContactModal(false)}
+                className="text-slate-500 hover:text-slate-700 text-2xl font-bold"
+              >
+                × {/* HTMLエンティティでバツ印 */}
+              </button>
+            </div>
+            <p className="text-sm text-slate-600 mb-4">
+              ご意見、ご感想、その他お問い合わせは、以下のメールアドレス宛にお願いいたします。
+            </p>
+            <a
+              href="mailto:ts@ai.aizu-tv.com?subject=AI記事要約.comへのお問い合わせ" // ★ 送信先メールアドレスと件名
+              className="block w-full text-center px-4 py-2.5 bg-blue-500 text-white text-base rounded-md font-medium hover:bg-blue-600 transition-colors"
+              onClick={() => setShowContactModal(false)} // メール送信後（またはメーラー起動後）にモーダルを閉じる
+            >
+              メールで問い合わせる
+            </a>
+            <button
+              onClick={() => setShowContactModal(false)}
+              className="mt-3 block w-full text-center px-4 py-2.5 bg-slate-200 text-slate-700 text-base rounded-md font-medium hover:bg-slate-300 transition-colors"
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
