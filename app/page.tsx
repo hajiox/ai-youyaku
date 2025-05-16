@@ -3,7 +3,59 @@
 "use client";
 
 import { useState } from "react";
+import { Metadata } from 'next';
 
+// ★★★ メタデータ定義ここから ★★★
+const siteName = "AI記事要約.com";
+const siteDescription = "記事URLをペーストするだけで、AIがカジュアルまたはフォーマルなスタイルで瞬時に要約。200字と1000字の2パターンで情報収集を効率化します。";
+// ↓↓↓ あなたの実際のドメインに合わせて必ず修正してください ↓↓↓
+const siteUrl = "https://youyaku.aizubrandhall-lp2.com";
+// ★ OGP画像のパスを public/aiyouyaku.png に変更
+const ogImageUrl = `${siteUrl}/aiyouyaku.png`;
+
+export const metadata: Metadata = {
+  // 検索エンジン向けの基本情報
+  title: `${siteName} - URLだけで簡単AI記事要約`,
+  description: siteDescription,
+  alternates: {
+    canonical: siteUrl,
+  },
+  // OGP (Open Graph Protocol) 設定 - Facebook, LinkedIn など
+  openGraph: {
+    title: `${siteName} - AIが記事を瞬時に要約`,
+    description: siteDescription,
+    url: siteUrl,
+    siteName: siteName,
+    images: [
+      {
+        url: ogImageUrl, // ★ ここが変更されます
+        width: 1200,     // 画像の実際の幅に合わせて調整推奨
+        height: 630,    // 画像の実際の高さに合わせて調整推奨
+        alt: `${siteName} OGP画像`,
+      },
+    ],
+    locale: 'ja_JP',
+    type: 'website',
+  },
+  // Twitterカード設定
+  twitter: {
+    card: 'summary_large_image',
+    title: `${siteName} - AIが記事を瞬時に要約`,
+    description: siteDescription,
+    images: [ogImageUrl], // ★ ここが変更されます
+    // site: '@YourTwitterHandle',
+    // creator: '@YourTwitterHandle',
+  },
+  // ファビコン (任意ですが設定推奨)
+  // icons: {
+  //   icon: '/favicon.ico',
+  //   apple: '/apple-touch-icon.png',
+  // },
+  // robots: 'index, follow',
+};
+// ★★★ メタデータ定義ここまで ★★★
+
+// ... (Homeコンポーネント以下は前回のコードと同じ) ...
 export default function Home() {
   const [url, setUrl] = useState("");
   const [shortSummary, setShortSummary] = useState("");
@@ -63,7 +115,7 @@ export default function Home() {
           originalLength: shortData.originalLength,
           processedLength: shortData.processedLength,
         });
-      } else if (longData.truncated !== undefined) { // fallback if short one didn't have it
+      } else if (longData.truncated !== undefined) {
          setProcessedInfo({
           truncated: longData.truncated,
           originalLength: longData.originalLength,
@@ -105,11 +157,10 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-slate-50 text-slate-700 font-sans">
-      <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-lg"> {/* 横幅を少し狭く */}
+      <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-lg">
         <h1 className="text-3xl font-semibold mb-2 text-center text-blue-600">
           AI記事要約.com
         </h1>
-        {/* 超簡潔な機能案内 */}
         <p className="text-sm text-slate-500 mb-6 text-center">
           記事URLをペーストして、お好みのスタイルでAIが要約します。
         </p>
@@ -119,13 +170,13 @@ export default function Home() {
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="記事URLを入力" // プレースホルダーを短く
+            placeholder="記事URLを入力"
             className="w-full text-base p-3 border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             disabled={isLoading}
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mb-4"> {/* ボタンを少し小さく、間隔も調整 */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
           <button
             onClick={() => handleSummarize("casual")}
             className={`w-full px-4 py-2.5 bg-sky-500 text-white text-base rounded-md font-medium hover:bg-sky-600 active:bg-sky-700 transition-colors focus:outline-none focus:ring-1 focus:ring-sky-400 focus:ring-offset-1 ${
@@ -133,7 +184,7 @@ export default function Home() {
             }`}
             disabled={isLoading}
           >
-            {isLoading ? "処理中..." : "カジュアル"} {/* ボタンテキスト短縮 */}
+            {isLoading ? "処理中..." : "カジュアル"}
           </button>
           <button
             onClick={() => handleSummarize("formal")}
@@ -142,7 +193,7 @@ export default function Home() {
             }`}
             disabled={isLoading}
           >
-            {isLoading ? "処理中..." : "フォーマル"} {/* ボタンテキスト短縮 */}
+            {isLoading ? "処理中..." : "フォーマル"}
           </button>
         </div>
         <div className="flex justify-center mb-6">
@@ -169,9 +220,9 @@ export default function Home() {
         )}
 
         {shortSummary && (
-          <div className="mt-6 p-4 border border-slate-200 rounded-md bg-white"> {/* 背景を白に */}
+          <div className="mt-6 p-4 border border-slate-200 rounded-md bg-white">
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-lg font-semibold text-slate-700">200字要約</h2> {/* 色を調整 */}
+              <h2 className="text-lg font-semibold text-slate-700">200字要約</h2>
               <button
                 onClick={() => copyText(shortSummary)}
                 className="text-xs text-white bg-slate-500 px-3 py-1 rounded hover:bg-slate-600 transition-colors"
@@ -184,9 +235,9 @@ export default function Home() {
         )}
 
         {longSummary && (
-          <div className="mt-4 p-4 border border-slate-200 rounded-md bg-white"> {/* 背景を白に */}
+          <div className="mt-4 p-4 border border-slate-200 rounded-md bg-white">
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-lg font-semibold text-slate-700">1000字要約</h2> {/* 色を調整 */}
+              <h2 className="text-lg font-semibold text-slate-700">1000字要約</h2>
               <button
                 onClick={() => copyText(longSummary)}
                 className="text-xs text-white bg-slate-500 px-3 py-1 rounded hover:bg-slate-600 transition-colors"
@@ -198,8 +249,8 @@ export default function Home() {
           </div>
         )}
       </div>
-      <footer className="text-center mt-8 text-xs text-slate-400"> {/* フッターも小さく */}
-        <p>© {new Date().getFullYear()} AI記事要約.com</p> {/* All rights reserved は任意 */}
+      <footer className="text-center mt-8 text-xs text-slate-400">
+        <p>© {new Date().getFullYear()} AI記事要約.com</p>
       </footer>
     </main>
   );
