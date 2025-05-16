@@ -10,9 +10,9 @@ export default function Home() {
   const [longSummary, setLongSummary] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tone, setTone] = useState<"casual" | "formal">("casual"); // トーンの状態 (デフォルトはカジュアル)
 
   const handleSummarize = async () => {
-    // ... (前回のコードと同じ)
     if (!url) {
       alert("URLを入力してください");
       return;
@@ -26,8 +26,8 @@ export default function Home() {
 
     try {
       const [shortRes, longRes] = await Promise.all([
-        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=short`),
-        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=long`),
+        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=short&tone=${tone}`), // toneパラメータを追加
+        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=long&tone=${tone}`),  // toneパラメータを追加
       ]);
 
       if (!shortRes.ok) {
@@ -56,7 +56,6 @@ export default function Home() {
   };
 
   const copyText = (text: string) => {
-    // ... (前回のコードと同じ)
     if (!text) return;
     navigator.clipboard.writeText(text)
       .then(() => {
@@ -69,12 +68,12 @@ export default function Home() {
   };
 
   const handleReset = () => {
-    // ... (前回のコードと同じ)
     setUrl("");
     setShortSummary("");
     setLongSummary("");
     setError(null);
     setIsLoading(false);
+    setTone("casual"); // リセット時にトーンもデフォルトに戻す
   };
 
   return (
@@ -93,6 +92,33 @@ export default function Home() {
             disabled={isLoading}
           />
         </div>
+
+        {/* トーン選択ボタン */}
+        <div className="mb-6 flex justify-center gap-3">
+          <button
+            onClick={() => setTone("casual")}
+            className={`px-5 py-2.5 rounded-lg text-md font-medium transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2
+              ${tone === "casual"
+                ? "bg-sky-500 text-white shadow-md ring-sky-400"
+                : "bg-slate-200 text-slate-700 hover:bg-slate-300 ring-slate-300"
+              }`}
+            disabled={isLoading}
+          >
+            カジュアル
+          </button>
+          <button
+            onClick={() => setTone("formal")}
+            className={`px-5 py-2.5 rounded-lg text-md font-medium transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2
+              ${tone === "formal"
+                ? "bg-indigo-600 text-white shadow-md ring-indigo-500"
+                : "bg-slate-200 text-slate-700 hover:bg-slate-300 ring-slate-300"
+              }`}
+            disabled={isLoading}
+          >
+            フォーマル
+          </button>
+        </div>
+
         <div className="flex flex-col sm:flex-row gap-3 mb-8">
           <button
             onClick={handleSummarize}
@@ -122,7 +148,7 @@ export default function Home() {
         {shortSummary && (
           <div className="mt-8 p-5 border border-slate-200 rounded-lg bg-slate-50 shadow-lg">
             <div className="flex justify-between items-center mb-3">
-              <h2 className="text-2xl font-semibold text-blue-700">200文字要約</h2>
+              <h2 className="text-2xl font-semibold text-blue-700">200文字要約 ({tone === 'casual' ? 'カジュアル' : 'フォーマル'})</h2>
               <button
                 onClick={() => copyText(shortSummary)}
                 className="text-sm text-white bg-slate-700 px-4 py-2 rounded-md hover:bg-slate-800 active:bg-slate-900 transition-colors active:scale-95 shadow"
@@ -137,7 +163,7 @@ export default function Home() {
         {longSummary && (
           <div className="mt-8 p-5 border border-slate-200 rounded-lg bg-slate-50 shadow-lg">
             <div className="flex justify-between items-center mb-3">
-              <h2 className="text-2xl font-semibold text-blue-700">1000文字要約</h2>
+              <h2 className="text-2xl font-semibold text-blue-700">1000文字要約 ({tone === 'casual' ? 'カジュアル' : 'フォーマル'})</h2>
               <button
                 onClick={() => copyText(longSummary)}
                 className="text-sm text-white bg-slate-700 px-4 py-2 rounded-md hover:bg-slate-800 active:bg-slate-900 transition-colors active:scale-95 shadow"
