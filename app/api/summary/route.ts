@@ -4,7 +4,10 @@ import { NextResponse } from "next/server";
 
 export const runtime = "edge";
 
-async function fetchUrlContent(url: string): Promise<string | null> {
+// ★ 入力コンテンツの最大文字数 (日本語文字数)
+const MAX_INPUT_CHAR_LENGTH = 5000; // 5000文字で切り捨て
+
+async function fetchUrlContent(url: string): Promise<{ content: string | null, truncated: boolean, originalLength: number, processedLength: number, error?: string }> {
   try {
     const response = await fetch(url, {
       headers: {
@@ -15,31 +18,46 @@ async function fetchUrlContent(url: string): Promise<string | null> {
 
     if (!response.ok) {
       console.error(`URLの取得に失敗: ${url}, ステータス: ${response.status}`);
-      return null;
+      return { content: null, truncated: false, originalLength: 0, processedLength: 0, error: `URLの取得に失敗 (ステータス: ${response.status})` };
     }
 
     const contentType = response.headers.get("content-type");
+    let plainText = "";
 
     if (contentType && contentType.includes("text/html")) {
       const html = await response.text();
-      let plainText = html
+      plainText = html
         .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
         .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
         .replace(/<[^>]+>/g, ' ')
         .replace(/\s\s+/g, ' ')
         .trim();
-      return plainText;
-    }
-    else if (contentType && contentType.includes("text/plain")) {
-      return await response.text();
-    }
-    else {
+    } else if (contentType && contentType.includes("text/plain")) {
+      plainText = await response.text();
+    } else {
       console.warn(`未対応のコンテンツタイプ: ${contentType} (URL: ${url})`);
-      return null;
+      return { content: null, truncated: false, originalLength: 0, processedLength: 0, error: `未対応のコンテンツタイプ: ${contentType}` };
     }
+
+    const originalLength = plainText.length;
+    let processedText = plainText;
+    let truncated = false;
+
+    if (originalLength === 0) {
+        return { content: null, truncated: false, originalLength: 0, processedLength: 0, error: "記事からテキストを抽出できませんでした。" };
+    }
+
+    if (originalLength > MAX_INPUT_CHAR_LENGTH) {
+      console.log(`記事が長いためトリミング: ${originalLength}文字 -> ${MAX_INPUT_CHAR_LENGTH}文字 (URL: ${url})`);
+      processedText = plainText.substring(0, MAX_INPUT_CHAR_LENGTH);
+      truncated = true;
+    }
+
+    return { content: processedText, truncated, originalLength, processedLength: processedText.length };
+
   } catch (error) {
     console.error(`URL (${url}) のコンテンツ取得中にエラー:`, error);
-    return null;
+    return { content: null, truncated: false, originalLength: 0, processedLength: 0, error: "記事コンテンツの取得中に予期せぬエラーが発生しました。" };
   }
 }
 
@@ -47,7 +65,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const urlToSummarize = searchParams.get("url");
   const mode = searchParams.get("mode");
-  const tone = searchParams.get("tone") || 'casual'; // toneパラメータを取得、デフォルトは'casual'
+  const tone = searchParams.get("tone") || 'casual';
 
   if (!urlToSummarize || !mode || (mode !== "short" && mode !== "long")) {
     return NextResponse.json(
@@ -55,7 +73,6 @@ export async function GET(req: Request) {
       { status: 400 }
     );
   }
-  // toneパラメータのバリデーション（任意）
   if (tone !== 'casual' && tone !== 'formal') {
     return NextResponse.json(
         { error: "無効なトーンが指定されました。casual または formal を指定してください。" },
@@ -63,27 +80,36 @@ export async function GET(req: Request) {
     );
   }
 
+  const fetchResult = await fetchUrlContent(urlToSummarize);
 
-  const webContent = await fetchUrlContent(urlToSummarize);
-
-  if (!webContent) {
+  if (fetchResult.error || !fetchResult.content) {
     return NextResponse.json(
-      { error: `URL (${urlToSummarize}) からコンテンツを取得または処理できませんでした。` },
+      { error: fetchResult.error || `URL (${urlToSummarize}) からコンテンツを取得または処理できませんでした。`, truncated: false, originalLength: fetchResult.originalLength, processedLength: fetchResult.processedLength },
       { status: 500 }
     );
   }
 
+  const webContent = fetchResult.content;
+  const truncated = fetchResult.truncated;
+  const originalLength = fetchResult.originalLength;
+  const processedLength = fetchResult.processedLength;
+
+
   const targetLengthDescription = mode === "short" ? "200文字程度の短い" : "1000文字程度の詳細な";
   
-  // トーンに応じたプロンプトの指示を作成
   let toneInstruction = "";
   if (tone === 'formal') {
     toneInstruction = `この記事の内容を、ビジネスレポートや学術的な文脈に適した、客観的かつフォーマルな文体で`;
-  } else { // casual (デフォルト)
+  } else {
     toneInstruction = `この記事の内容を、友人に話すようなカジュアルで、親しみやすく分かりやすい口調で`;
   }
 
-  const prompt = `${toneInstruction}、日本語で${targetLengthDescription}要約にしてください。\n\nテキスト:\n${webContent}`;
+  let prompt = `${toneInstruction}、日本語で${targetLengthDescription}要約にしてください。\n\nテキスト:\n${webContent}`;
+  if (truncated) {
+    // プロンプトにトリミング情報を加えるのは任意ですが、AIの理解を助ける可能性があります。
+    prompt = `以下のテキストは、元記事の先頭${MAX_INPUT_CHAR_LENGTH}文字分です（元記事の全長は${originalLength}文字）。\n${prompt}`;
+  }
+
 
   try {
     const apiRes = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -103,7 +129,7 @@ export async function GET(req: Request) {
       const errorBody = await apiRes.text();
       console.error("OpenAI APIエラー ステータス:", apiRes.status, "本文:", errorBody);
       return NextResponse.json(
-        { error: `OpenAI APIリクエストに失敗しました (ステータス: ${apiRes.status})`, details: errorBody },
+        { error: `OpenAI APIリクエストに失敗しました (ステータス: ${apiRes.status})`, details: errorBody, truncated, originalLength, processedLength },
         { status: apiRes.status }
       );
     }
@@ -114,12 +140,12 @@ export async function GET(req: Request) {
     if (!text) {
         console.warn("OpenAIからの応答に要約テキストが含まれていませんでした。", data);
         return NextResponse.json(
-            { error: "OpenAIからの応答に要約テキストが含まれていませんでした。" },
+            { error: "OpenAIからの応答に要約テキストが含まれていませんでした。", truncated, originalLength, processedLength },
             { status: 500 }
         );
     }
 
-    return NextResponse.json({ result: text });
+    return NextResponse.json({ result: text, truncated, originalLength, processedLength });
   } catch (err) {
     console.error("APIハンドラエラー:", err);
     if (err instanceof Error) {
@@ -127,7 +153,7 @@ export async function GET(req: Request) {
         console.error("スタックトレース:", err.stack);
     }
     return NextResponse.json(
-      { error: "サーバー内部エラーが発生しました。" },
+      { error: "サーバー内部エラーが発生しました。", truncated: false, originalLength: 0, processedLength: 0 },
       { status: 500 }
     );
   }
