@@ -10,9 +10,10 @@ export default function Home() {
   const [longSummary, setLongSummary] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tone, setTone] = useState<"casual" | "formal">("casual"); // トーンの状態 (デフォルトはカジュアル)
+  // const [tone, setTone] = useState<"casual" | "formal">("casual"); // ★ このstateは不要になります
 
-  const handleSummarize = async () => {
+  // handleSummarize 関数に tone を引数として渡すように変更
+  const handleSummarize = async (selectedTone: "casual" | "formal") => {
     if (!url) {
       alert("URLを入力してください");
       return;
@@ -26,8 +27,8 @@ export default function Home() {
 
     try {
       const [shortRes, longRes] = await Promise.all([
-        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=short&tone=${tone}`), // toneパラメータを追加
-        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=long&tone=${tone}`),  // toneパラメータを追加
+        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=short&tone=${selectedTone}`), // 引数のselectedToneを使用
+        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=long&tone=${selectedTone}`),  // 引数のselectedToneを使用
       ]);
 
       if (!shortRes.ok) {
@@ -73,7 +74,7 @@ export default function Home() {
     setLongSummary("");
     setError(null);
     setIsLoading(false);
-    setTone("casual"); // リセット時にトーンもデフォルトに戻す
+    // setTone("casual"); // ★ tone stateがなくなったので不要
   };
 
   return (
@@ -82,7 +83,7 @@ export default function Home() {
         <h1 className="text-4xl sm:text-5xl font-bold mb-8 text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-sky-500">
           AI記事要約.com
         </h1>
-        <div className="mb-6">
+        <div className="mb-6"> {/* ★ mb-6 に変更 */}
           <input
             type="text"
             value={url}
@@ -93,50 +94,41 @@ export default function Home() {
           />
         </div>
 
-        {/* トーン選択ボタン */}
-        <div className="mb-6 flex justify-center gap-3">
-          <button
-            onClick={() => setTone("casual")}
-            className={`px-5 py-2.5 rounded-lg text-md font-medium transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2
-              ${tone === "casual"
-                ? "bg-sky-500 text-white shadow-md ring-sky-400"
-                : "bg-slate-200 text-slate-700 hover:bg-slate-300 ring-slate-300"
-              }`}
-            disabled={isLoading}
-          >
-            カジュアル
-          </button>
-          <button
-            onClick={() => setTone("formal")}
-            className={`px-5 py-2.5 rounded-lg text-md font-medium transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2
-              ${tone === "formal"
-                ? "bg-indigo-600 text-white shadow-md ring-indigo-500"
-                : "bg-slate-200 text-slate-700 hover:bg-slate-300 ring-slate-300"
-              }`}
-            disabled={isLoading}
-          >
-            フォーマル
-          </button>
-        </div>
+        {/* ★ トーン選択ボタンは削除 */}
+        {/* <div className="mb-6 flex justify-center gap-3"> ... </div> */}
 
-        <div className="flex flex-col sm:flex-row gap-3 mb-8">
+        {/* 要約ボタンを2つに分割 */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
           <button
-            onClick={handleSummarize}
-            className={`w-full sm:flex-1 px-6 py-3.5 bg-blue-600 text-white text-lg rounded-lg font-semibold hover:bg-blue-700 active:bg-blue-800 transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shadow-md hover:shadow-lg active:scale-95 ${
+            onClick={() => handleSummarize("casual")} // "casual" を指定
+            className={`w-full px-6 py-3.5 bg-sky-500 text-white text-lg rounded-lg font-semibold hover:bg-sky-600 active:bg-sky-700 transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 shadow-md hover:shadow-lg active:scale-95 ${
               isLoading ? "opacity-60 cursor-not-allowed" : ""
             }`}
             disabled={isLoading}
           >
-            {isLoading ? "要約中..." : "要約する"}
+            {isLoading ? "処理中..." : "カジュアル要約"}
           </button>
           <button
+            onClick={() => handleSummarize("formal")} // "formal" を指定
+            className={`w-full px-6 py-3.5 bg-indigo-600 text-white text-lg rounded-lg font-semibold hover:bg-indigo-700 active:bg-indigo-800 transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 shadow-md hover:shadow-lg active:scale-95 ${
+              isLoading ? "opacity-60 cursor-not-allowed" : ""
+            }`}
+            disabled={isLoading}
+          >
+            {isLoading ? "処理中..." : "フォーマル要約"}
+          </button>
+        </div>
+        {/* リセットボタンを単独で配置 */}
+        <div className="flex justify-center mb-8">
+          <button
             onClick={handleReset}
-            className="w-full sm:w-auto px-6 py-3.5 bg-slate-500 text-white text-lg rounded-lg font-semibold hover:bg-slate-600 active:bg-slate-700 transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 shadow-md hover:shadow-lg active:scale-95"
+            className="w-full sm:w-auto px-8 py-3 bg-slate-500 text-white text-lg rounded-lg font-semibold hover:bg-slate-600 active:bg-slate-700 transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 shadow-md hover:shadow-lg active:scale-95"
             disabled={isLoading && !url && !shortSummary && !longSummary && !error}
           >
             リセット
           </button>
         </div>
+
 
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-300 text-red-700 rounded-lg shadow-sm">
@@ -148,7 +140,8 @@ export default function Home() {
         {shortSummary && (
           <div className="mt-8 p-5 border border-slate-200 rounded-lg bg-slate-50 shadow-lg">
             <div className="flex justify-between items-center mb-3">
-              <h2 className="text-2xl font-semibold text-blue-700">200文字要約 ({tone === 'casual' ? 'カジュアル' : 'フォーマル'})</h2>
+              {/* ★ 表示するトーンが動的に決まるので、要約結果の見出しからトーン表示は削除しても良いかも */}
+              <h2 className="text-2xl font-semibold text-blue-700">200文字要約</h2>
               <button
                 onClick={() => copyText(shortSummary)}
                 className="text-sm text-white bg-slate-700 px-4 py-2 rounded-md hover:bg-slate-800 active:bg-slate-900 transition-colors active:scale-95 shadow"
@@ -163,7 +156,8 @@ export default function Home() {
         {longSummary && (
           <div className="mt-8 p-5 border border-slate-200 rounded-lg bg-slate-50 shadow-lg">
             <div className="flex justify-between items-center mb-3">
-              <h2 className="text-2xl font-semibold text-blue-700">1000文字要約 ({tone === 'casual' ? 'カジュアル' : 'フォーマル'})</h2>
+              {/* ★ 表示するトーンが動的に決まるので、要約結果の見出しからトーン表示は削除しても良いかも */}
+              <h2 className="text-2xl font-semibold text-blue-700">1000文字要約</h2>
               <button
                 onClick={() => copyText(longSummary)}
                 className="text-sm text-white bg-slate-700 px-4 py-2 rounded-md hover:bg-slate-800 active:bg-slate-900 transition-colors active:scale-95 shadow"
