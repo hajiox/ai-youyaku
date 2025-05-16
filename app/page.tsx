@@ -10,9 +10,8 @@ export default function Home() {
   const [longSummary, setLongSummary] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // const [tone, setTone] = useState<"casual" | "formal">("casual"); // ★ このstateは不要になります
+  const [processedInfo, setProcessedInfo] = useState<{truncated: boolean, originalLength: number, processedLength: number} | null>(null);
 
-  // handleSummarize 関数に tone を引数として渡すように変更
   const handleSummarize = async (selectedTone: "casual" | "formal") => {
     if (!url) {
       alert("URLを入力してください");
@@ -24,27 +23,54 @@ export default function Home() {
     setError(null);
     setShortSummary("");
     setLongSummary("");
+    setProcessedInfo(null);
 
     try {
       const [shortRes, longRes] = await Promise.all([
-        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=short&tone=${selectedTone}`), // 引数のselectedToneを使用
-        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=long&tone=${selectedTone}`),  // 引数のselectedToneを使用
+        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=short&tone=${selectedTone}`),
+        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=long&tone=${selectedTone}`),
       ]);
 
+      let shortError = null;
+      let longError = null;
+      let shortData: any = {};
+      let longData: any = {};
+
       if (!shortRes.ok) {
-        const errorData = await shortRes.json().catch(() => ({ result: "200文字要約の取得に失敗しました" }));
-        throw new Error(errorData.result || `200文字要約エラー: ${shortRes.status}`);
-      }
-      if (!longRes.ok) {
-        const errorData = await longRes.json().catch(() => ({ result: "1000文字要約の取得に失敗しました" }));
-        throw new Error(errorData.result || `1000文字要約エラー: ${longRes.status}`);
+        shortError = `200文字要約エラー: ${shortRes.status}`;
+        try { shortData = await shortRes.json(); if(shortData.error) shortError = shortData.error; } catch {}
+      } else {
+        shortData = await shortRes.json();
       }
 
-      const shortData = await shortRes.json();
-      const longData = await longRes.json();
+      if (!longRes.ok) {
+        longError = `1000文字要約エラー: ${longRes.status}`;
+        try { longData = await longRes.json(); if(longData.error) longError = longData.error; } catch {}
+      } else {
+        longData = await longRes.json();
+      }
+
+      if (shortError || longError) {
+        throw new Error(shortError || longError || "要約中にエラーが発生しました");
+      }
 
       setShortSummary(shortData.result || "200文字要約の取得に失敗しました");
       setLongSummary(longData.result || "1000文字要約の取得に失敗しました");
+
+      if (shortData.truncated !== undefined) {
+        setProcessedInfo({
+          truncated: shortData.truncated,
+          originalLength: shortData.originalLength,
+          processedLength: shortData.processedLength,
+        });
+      } else if (longData.truncated !== undefined) { // fallback if short one didn't have it
+         setProcessedInfo({
+          truncated: longData.truncated,
+          originalLength: longData.originalLength,
+          processedLength: longData.processedLength,
+        });
+      }
+
 
     } catch (err: any) {
       console.error(err);
@@ -74,55 +100,55 @@ export default function Home() {
     setLongSummary("");
     setError(null);
     setIsLoading(false);
-    // setTone("casual"); // ★ tone stateがなくなったので不要
+    setProcessedInfo(null);
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-4 sm:p-6 bg-gradient-to-br from-slate-100 to-sky-100 text-slate-800 font-sans">
-      <div className="bg-white p-6 sm:p-8 rounded-xl shadow-2xl w-full max-w-2xl transform transition-all duration-500 hover:scale-[1.01]">
-        <h1 className="text-4xl sm:text-5xl font-bold mb-8 text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-sky-500">
+    <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-slate-50 text-slate-700 font-sans">
+      <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-lg"> {/* 横幅を少し狭く */}
+        <h1 className="text-3xl font-semibold mb-2 text-center text-blue-600">
           AI記事要約.com
         </h1>
-        <div className="mb-6"> {/* ★ mb-6 に変更 */}
+        {/* 超簡潔な機能案内 */}
+        <p className="text-sm text-slate-500 mb-6 text-center">
+          記事URLをペーストして、お好みのスタイルでAIが要約します。
+        </p>
+
+        <div className="mb-4">
           <input
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="記事URLを入力してください"
-            className="w-full text-lg p-4 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow shadow-sm placeholder-slate-400"
+            placeholder="記事URLを入力" // プレースホルダーを短く
+            className="w-full text-base p-3 border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             disabled={isLoading}
           />
         </div>
 
-        {/* ★ トーン選択ボタンは削除 */}
-        {/* <div className="mb-6 flex justify-center gap-3"> ... </div> */}
-
-        {/* 要約ボタンを2つに分割 */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+        <div className="grid grid-cols-2 gap-3 mb-4"> {/* ボタンを少し小さく、間隔も調整 */}
           <button
-            onClick={() => handleSummarize("casual")} // "casual" を指定
-            className={`w-full px-6 py-3.5 bg-sky-500 text-white text-lg rounded-lg font-semibold hover:bg-sky-600 active:bg-sky-700 transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 shadow-md hover:shadow-lg active:scale-95 ${
-              isLoading ? "opacity-60 cursor-not-allowed" : ""
+            onClick={() => handleSummarize("casual")}
+            className={`w-full px-4 py-2.5 bg-sky-500 text-white text-base rounded-md font-medium hover:bg-sky-600 active:bg-sky-700 transition-colors focus:outline-none focus:ring-1 focus:ring-sky-400 focus:ring-offset-1 ${
+              isLoading ? "opacity-50 cursor-not-allowed" : ""
             }`}
             disabled={isLoading}
           >
-            {isLoading ? "処理中..." : "カジュアル要約"}
+            {isLoading ? "処理中..." : "カジュアル"} {/* ボタンテキスト短縮 */}
           </button>
           <button
-            onClick={() => handleSummarize("formal")} // "formal" を指定
-            className={`w-full px-6 py-3.5 bg-indigo-600 text-white text-lg rounded-lg font-semibold hover:bg-indigo-700 active:bg-indigo-800 transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 shadow-md hover:shadow-lg active:scale-95 ${
-              isLoading ? "opacity-60 cursor-not-allowed" : ""
+            onClick={() => handleSummarize("formal")}
+            className={`w-full px-4 py-2.5 bg-indigo-500 text-white text-base rounded-md font-medium hover:bg-indigo-600 active:bg-indigo-700 transition-colors focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:ring-offset-1 ${
+              isLoading ? "opacity-50 cursor-not-allowed" : ""
             }`}
             disabled={isLoading}
           >
-            {isLoading ? "処理中..." : "フォーマル要約"}
+            {isLoading ? "処理中..." : "フォーマル"} {/* ボタンテキスト短縮 */}
           </button>
         </div>
-        {/* リセットボタンを単独で配置 */}
-        <div className="flex justify-center mb-8">
+        <div className="flex justify-center mb-6">
           <button
             onClick={handleReset}
-            className="w-full sm:w-auto px-8 py-3 bg-slate-500 text-white text-lg rounded-lg font-semibold hover:bg-slate-600 active:bg-slate-700 transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 shadow-md hover:shadow-lg active:scale-95"
+            className="w-auto px-6 py-2 bg-slate-400 text-white text-base rounded-md font-medium hover:bg-slate-500 active:bg-slate-600 transition-colors focus:outline-none focus:ring-1 focus:ring-slate-300 focus:ring-offset-1"
             disabled={isLoading && !url && !shortSummary && !longSummary && !error}
           >
             リセット
@@ -131,46 +157,49 @@ export default function Home() {
 
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-300 text-red-700 rounded-lg shadow-sm">
-            <p className="font-semibold text-lg">エラーが発生しました:</p>
-            <p className="mt-1">{error}</p>
+          <div className="mb-4 p-3 bg-red-50 border border-red-300 text-red-600 rounded-md text-sm">
+            <p>{error}</p>
+          </div>
+        )}
+
+        {processedInfo && processedInfo.truncated && (
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-300 text-yellow-600 rounded-md text-sm">
+            <p>ℹ️ 記事が長いため、先頭{processedInfo.processedLength.toLocaleString()}文字で要約しました。(原文: {processedInfo.originalLength.toLocaleString()}文字)</p>
           </div>
         )}
 
         {shortSummary && (
-          <div className="mt-8 p-5 border border-slate-200 rounded-lg bg-slate-50 shadow-lg">
-            <div className="flex justify-between items-center mb-3">
-              {/* ★ 表示するトーンが動的に決まるので、要約結果の見出しからトーン表示は削除しても良いかも */}
-              <h2 className="text-2xl font-semibold text-blue-700">200文字要約</h2>
+          <div className="mt-6 p-4 border border-slate-200 rounded-md bg-white"> {/* 背景を白に */}
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-lg font-semibold text-slate-700">200字要約</h2> {/* 色を調整 */}
               <button
                 onClick={() => copyText(shortSummary)}
-                className="text-sm text-white bg-slate-700 px-4 py-2 rounded-md hover:bg-slate-800 active:bg-slate-900 transition-colors active:scale-95 shadow"
+                className="text-xs text-white bg-slate-500 px-3 py-1 rounded hover:bg-slate-600 transition-colors"
               >
                 コピー
               </button>
             </div>
-            <p className="mb-2 text-slate-700 text-base leading-relaxed whitespace-pre-wrap break-words">{shortSummary}</p>
+            <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap break-words">{shortSummary}</p>
           </div>
         )}
 
         {longSummary && (
-          <div className="mt-8 p-5 border border-slate-200 rounded-lg bg-slate-50 shadow-lg">
-            <div className="flex justify-between items-center mb-3">
-              {/* ★ 表示するトーンが動的に決まるので、要約結果の見出しからトーン表示は削除しても良いかも */}
-              <h2 className="text-2xl font-semibold text-blue-700">1000文字要約</h2>
+          <div className="mt-4 p-4 border border-slate-200 rounded-md bg-white"> {/* 背景を白に */}
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-lg font-semibold text-slate-700">1000字要約</h2> {/* 色を調整 */}
               <button
                 onClick={() => copyText(longSummary)}
-                className="text-sm text-white bg-slate-700 px-4 py-2 rounded-md hover:bg-slate-800 active:bg-slate-900 transition-colors active:scale-95 shadow"
+                className="text-xs text-white bg-slate-500 px-3 py-1 rounded hover:bg-slate-600 transition-colors"
               >
                 コピー
               </button>
             </div>
-            <p className="mb-2 text-slate-700 text-base leading-relaxed whitespace-pre-wrap break-words">{longSummary}</p>
+            <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap break-words">{longSummary}</p>
           </div>
         )}
       </div>
-      <footer className="text-center mt-12 text-slate-500 text-sm">
-        <p>© {new Date().getFullYear()} AI記事要約.com. All rights reserved.</p>
+      <footer className="text-center mt-8 text-xs text-slate-400"> {/* フッターも小さく */}
+        <p>© {new Date().getFullYear()} AI記事要約.com</p> {/* All rights reserved は任意 */}
       </footer>
     </main>
   );
