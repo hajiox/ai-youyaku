@@ -4,14 +4,13 @@ import { NextResponse } from "next/server";
 
 export const runtime = "edge";
 
-// URLからコンテンツを取得し、簡単なテキスト抽出を行うヘルパー関数
 async function fetchUrlContent(url: string): Promise<string | null> {
   try {
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
       },
-      cache: 'no-store' // ★キャッシュを無効化
+      cache: 'no-store'
     });
 
     if (!response.ok) {
@@ -48,6 +47,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const urlToSummarize = searchParams.get("url");
   const mode = searchParams.get("mode");
+  const tone = searchParams.get("tone") || 'casual'; // toneパラメータを取得、デフォルトは'casual'
 
   if (!urlToSummarize || !mode || (mode !== "short" && mode !== "long")) {
     return NextResponse.json(
@@ -55,6 +55,14 @@ export async function GET(req: Request) {
       { status: 400 }
     );
   }
+  // toneパラメータのバリデーション（任意）
+  if (tone !== 'casual' && tone !== 'formal') {
+    return NextResponse.json(
+        { error: "無効なトーンが指定されました。casual または formal を指定してください。" },
+        { status: 400 }
+    );
+  }
+
 
   const webContent = await fetchUrlContent(urlToSummarize);
 
@@ -66,7 +74,16 @@ export async function GET(req: Request) {
   }
 
   const targetLengthDescription = mode === "short" ? "200文字程度の短い" : "1000文字程度の詳細な";
-  const prompt = `以下のテキスト内容を日本語で${targetLengthDescription}要約にしてください。\n\nテキスト:\n${webContent}`;
+  
+  // トーンに応じたプロンプトの指示を作成
+  let toneInstruction = "";
+  if (tone === 'formal') {
+    toneInstruction = `この記事の内容を、ビジネスレポートや学術的な文脈に適した、客観的かつフォーマルな文体で`;
+  } else { // casual (デフォルト)
+    toneInstruction = `この記事の内容を、友人に話すようなカジュアルで、親しみやすく分かりやすい口調で`;
+  }
+
+  const prompt = `${toneInstruction}、日本語で${targetLengthDescription}要約にしてください。\n\nテキスト:\n${webContent}`;
 
   try {
     const apiRes = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -79,7 +96,7 @@ export async function GET(req: Request) {
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
       }),
-      cache: 'no-store' // ★キャッシュを無効化
+      cache: 'no-store'
     });
 
     if (!apiRes.ok) {
