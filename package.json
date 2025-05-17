@@ -63,8 +63,8 @@
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.6",
     "zod": "^3.24.1",
-    "next-auth": "latest", // ← この行の最後にカンマを追加
-    "@supabase/supabase-js": "^2.44.1" // ★★★ これを追加 ★★★ (この行の最後にはカンマは不要です)
+    "next-auth": "latest", // ★★★ この行の最後にカンマを追加 ★★★
+    "@supabase/supabase-js": "^2.44.1" // ★★★ これを追加 (この行が最後なのでカンマは不要) ★★★
   },
   "devDependencies": {
     "@types/node": "^22",
