@@ -3,22 +3,43 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSession, signIn, signOut } from "next-auth/react"; // ★ Auth.js関連をインポート
+import { useSession, signIn, signOut } from "next-auth/react";
+import ToneSampleModal from "@/components/ToneSampleModal"; // ★ モーダルコンポーネントをインポート (後で作成)
 
-// メタデータ定義は app/layout.tsx に移動
+// APIから返ってくる口調サンプルの型 (将来的にGETで使う場合)
+interface UserToneSampleData {
+  id: string;
+  user_id: string;
+  tone_sample: string;
+  character_limit: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// 無料ユーザーの口調サンプルの最大文字数 (API側と合わせる)
+const FREE_USER_TONE_SAMPLE_MAX_LENGTH = 1000;
 
 export default function Home() {
   const [url, setUrl] = useState("");
   const [shortSummary, setShortSummary] = useState("");
   const [longSummary, setLongSummary] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false); // 要約処理中のローディング
+  const [error, setError] = useState<string | null>(null); // 要約エラー
   const [processedInfo, setProcessedInfo] = useState<{truncated: boolean, originalLength: number, processedLength: number} | null>(null);
   const [showContactModal, setShowContactModal] = useState(false);
 
-  const { data: session, status } = useSession(); // ★ セッション情報を取得
+  const { data: session, status } = useSession();
 
-  const handleSummarize = async (selectedTone: "casual" | "formal") => {
+  // --- ★ 口調サンプル関連のState ---
+  const [showToneSampleModal, setShowToneSampleModal] = useState(false);
+  const [currentDbSample, setCurrentDbSample] = useState(""); // DBから読み込む想定の現在のサンプル (今回は空のまま)
+  const [isSavingToneSample, setIsSavingToneSample] = useState(false); // 保存処理中のローディング
+  const [toneSampleError, setToneSampleError] = useState<string | null>(null); // 保存エラー
+  const [toneSampleSuccessMessage, setToneSampleSuccessMessage] = useState<string | null>(null); // 保存成功メッセージ
+  // --- ★ ここまで ★ ---
+
+
+  const handleSummarize = async (selectedTone: "casual" | "formal" /* | "custom" */) => { // customは将来用
     // ... (既存のhandleSummarize関数の中身はそのまま)
     if (!url) {
       alert("URLを入力してください");
@@ -31,6 +52,9 @@ export default function Home() {
     setShortSummary("");
     setLongSummary("");
     setProcessedInfo(null);
+
+    // 将来的にはここで selectedTone === "custom" の場合の処理分岐が入る
+    // その際に currentDbSample (またはAPIから再取得したユーザーの口調) を使う
 
     try {
       const [shortRes, longRes] = await Promise.all([
@@ -112,8 +136,8 @@ export default function Home() {
   };
 
   useEffect(() => {
-    // ... (既存のuseEffectの中身はそのまま)
-    if (showContactModal) {
+    // ... (既存の連絡先モーダル用useEffectの中身はそのまま)
+    if (showContactModal || showToneSampleModal) { // ★ 口調サンプルモーダルも考慮
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
@@ -121,7 +145,46 @@ export default function Home() {
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [showContactModal]);
+  }, [showContactModal, showToneSampleModal]); // ★ 依存配列にshowToneSampleModal追加
+
+
+  // --- ★ 口調サンプル保存処理関数 ---
+  const handleSaveToneSample = async (sampleToSave: string) => {
+    if (!sampleToSave.trim()) {
+      setToneSampleError("口調サンプルを入力してください。");
+      // モーダル側で制御するので、ここでは return しなくても良いかも
+      return;
+    }
+    setIsSavingToneSample(true);
+    setToneSampleError(null);
+    setToneSampleSuccessMessage(null);
+
+    try {
+      const response = await fetch('/api/tone-sample', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ toneSample: sampleToSave }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || '口調サンプルの保存に失敗しました。');
+      }
+      setToneSampleSuccessMessage(result.message || '口調サンプルを保存しました！');
+      setCurrentDbSample(sampleToSave); // ★ 保存成功したら現在のサンプルとして記憶 (UI反映用)
+      setTimeout(() => setShowToneSampleModal(false), 1500); // 1.5秒後にモーダルを閉じる
+
+    } catch (err: any) {
+      console.error("Failed to save tone sample:", err);
+      setToneSampleError(err.message || '口調サンプルの保存中にエラーが発生しました。');
+    } finally {
+      setIsSavingToneSample(false);
+    }
+  };
+  // --- ★ ここまで ★ ---
 
 
   return (
@@ -134,7 +197,7 @@ export default function Home() {
           記事URLをペーストして、お好みのスタイルでAIが要約します。
         </p>
 
-        {/* ★★★ ログイン状態表示ここから ★★★ */}
+        {/* ログイン状態表示 */}
         <div className="text-xs text-slate-500 mb-4 text-right pr-1">
           {status === "loading" && <p>読込中...</p>}
           {status === "authenticated" && session?.user && (
@@ -160,8 +223,26 @@ export default function Home() {
             </button>
           )}
         </div>
-        {/* ★★★ ログイン状態表示ここまで ★★★ */}
 
+        {/* ★★★ 口調サンプル登録ボタン (ログイン時のみ表示) ★★★ */}
+        {status === "authenticated" && (
+          <div className="mb-4 text-center">
+            <button
+              onClick={() => {
+                setToneSampleError(null); // モーダル開くときにエラーと成功メッセージをクリア
+                setToneSampleSuccessMessage(null);
+                setShowToneSampleModal(true);
+              }}
+              className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-md font-medium hover:bg-slate-200 border border-slate-300"
+            >
+              自分の口調を登録・編集する
+            </button>
+          </div>
+        )}
+        {/* ★★★ ここまで ★★★ */}
+
+
+        {/* ... (既存のURL入力、要約ボタン、リセットボタン、エラー表示、結果表示などはそのまま) ... */}
         <div className="mb-4">
           <input
             type="text"
@@ -246,6 +327,7 @@ export default function Home() {
         )}
       </div>
 
+      {/* ... (既存のフッターはそのまま) ... */}
       <footer className="text-center mt-8 text-xs text-slate-400">
         <p className="mb-1">
           <button
@@ -261,6 +343,7 @@ export default function Home() {
         <p className="mt-1">© {new Date().getFullYear()} AI記事要約.com</p>
       </footer>
 
+      {/* ... (既存の連絡先モーダルはそのまま) ... */}
       {showContactModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
@@ -292,6 +375,21 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* ★★★ 口調サンプル登録モーダル ★★★ */}
+      {showToneSampleModal && (
+        <ToneSampleModal
+          isOpen={showToneSampleModal}
+          onClose={() => setShowToneSampleModal(false)}
+          currentSample={currentDbSample} // ★ DBから読み込んだ現在のサンプル (今回は常に空)
+          onSave={handleSaveToneSample}
+          maxLength={FREE_USER_TONE_SAMPLE_MAX_LENGTH}
+          isSaving={isSavingToneSample}
+          saveError={toneSampleError}
+          saveSuccessMessage={toneSampleSuccessMessage}
+        />
+      )}
+      {/* ★★★ ここまで ★★★ */}
     </main>
   );
 }
