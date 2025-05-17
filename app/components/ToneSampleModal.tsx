@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 interface ToneSampleModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentSample: string; // 今回は常に空文字が渡ってくる想定
+  currentSample: string;
   onSave: (sample: string) => Promise<void>;
   maxLength: number;
   isSaving: boolean;
@@ -24,20 +24,18 @@ export default function ToneSampleModal({
   saveError,
   saveSuccessMessage,
 }: ToneSampleModalProps) {
-  const [sampleText, setSampleText] = useState(""); // モーダルが開くたびに初期化する
+  const [sampleText, setSampleText] = useState("");
   const [charCount, setCharCount] = useState(0);
 
-  // モーダルが開かれたとき、またはcurrentSampleが変わったときにテキストエリアを初期化
   useEffect(() => {
     if (isOpen) {
-      setSampleText(currentSample); // 今回はcurrentSampleが常に空なので、空で初期化される
+      setSampleText(currentSample);
       setCharCount(currentSample.length);
     }
   }, [isOpen, currentSample]);
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     let text = e.target.value;
-    // 文字数制限はAPI側でも行っているので、ここでは超えないようにする程度でも良い
     if (text.length > maxLength) {
       text = text.substring(0, maxLength);
     }
@@ -46,10 +44,9 @@ export default function ToneSampleModal({
   };
 
   const handleSaveClick = async () => {
-    // 簡単なバリデーション（任意、API側でもチェックしている）
-    if (!sampleText.trim()) {
-      // alert("口調サンプルを入力してください。"); // あるいはエラーメッセージをpropsで受け取って表示
-      return;
+    if (!sampleText.trim() && !currentSample) { // 新規登録時で空の場合はエラーにしても良い
+        // もしエラーメッセージをモーダル内で表示するならここでセット
+        return;
     }
     await onSave(sampleText);
   };
@@ -64,6 +61,7 @@ export default function ToneSampleModal({
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600 text-2xl sm:text-3xl"
+            aria-label="閉じる"
           >
             &times;
           </button>
@@ -78,7 +76,6 @@ export default function ToneSampleModal({
           placeholder="ここに口調サンプルを入力..."
           value={sampleText}
           onChange={handleTextChange}
-          // maxLength={maxLength} // HTMLのmaxLength属性も使えるが、onChangeで制御しているので必須ではない
         />
         <div className="flex justify-between items-center mb-4 text-xs sm:text-sm text-slate-500">
           <span>{charCount}/{maxLength} 文字</span>
@@ -101,9 +98,9 @@ export default function ToneSampleModal({
           </button>
           <button
             onClick={handleSaveClick}
-            disabled={isSaving || !sampleText.trim()} // 保存中または未入力の場合は無効化
+            disabled={isSaving || (!sampleText.trim() && !currentSample) || sampleText === currentSample} // 保存中、未入力(かつ初期値も空)、または変更なしの場合は無効化
             className={`px-4 py-2.5 bg-green-500 text-white text-sm rounded-md font-medium hover:bg-green-600 active:bg-green-700 transition-colors focus:outline-none focus:ring-1 focus:ring-green-400 focus:ring-offset-1 w-full sm:w-auto order-1 sm:order-2 ${
-              (isSaving || !sampleText.trim()) ? "opacity-50 cursor-not-allowed" : ""
+              (isSaving || (!sampleText.trim() && !currentSample) || sampleText === currentSample) ? "opacity-50 cursor-not-allowed" : ""
             }`}
           >
             {isSaving ? "保存中..." : "この内容で保存する"}
