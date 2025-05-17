@@ -10,13 +10,22 @@ const FREE_USER_TONE_SAMPLE_MAX_LENGTH = 1000;
 // const PAID_USER_TONE_SAMPLE_MAX_LENGTH = 3000;
 
 export async function POST(req: Request) {
+  // ★★★ デバッグ用ログ追加ここから ★★★
+  console.log("API /api/tone-sample called at:", new Date().toISOString());
+  console.log("Request Headers:", JSON.stringify(Object.fromEntries(req.headers), null, 2));
+  const cookieHeader = req.headers.get('cookie');
+  console.log("Cookie Header:", cookieHeader);
+  // ★★★ デバッグ用ログ追加ここまで ★★★
+
   try {
     // 1. セッションからユーザー情報を取得
     const session = await getServerSession(authOptions);
     if (!session || !session.user || !session.user.id) {
+      console.log("Session not found or user ID missing. Session:", JSON.stringify(session, null, 2)); // ★セッション詳細ログ
       return NextResponse.json({ error: '認証されていません。ログインしてください。' }, { status: 401 });
     }
     const userId = session.user.id; // Auth.jsが提供するユーザーID
+    console.log("User ID from session:", userId); // ★ユーザーID確認ログ
 
     // 2. リクエストボディから口調サンプルテキストを取得
     const body = await req.json();
@@ -39,13 +48,14 @@ export async function POST(req: Request) {
       .eq('user_id', userId)
       .maybeSingle();
 
-    if (selectError && selectError.code !== 'PGRST116') {
+    if (selectError && selectError.code !== 'PGRST116') { // PGRST116は結果0行なので無視
         console.error('Supabase select error:', selectError);
         return NextResponse.json({ error: 'データベースエラーが発生しました (select)。' }, { status: 500 });
     }
 
     let dbResponse;
     if (existingSample) {
+      console.log("Existing sample found, updating for user_id:", userId); // ★更新処理に入るログ
       // 既存データがあれば更新
       const { data, error } = await supabase
         .from('user_tone_samples')
@@ -59,6 +69,7 @@ export async function POST(req: Request) {
         .single();
         dbResponse = { data, error };
     } else {
+      console.log("No existing sample, inserting new for user_id:", userId); // ★挿入処理に入るログ
       // なければ新規挿入
       const { data, error } = await supabase
         .from('user_tone_samples')
@@ -79,6 +90,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: '口調サンプルの保存に失敗しました。' }, { status: 500 });
     }
 
+    console.log("Tone sample saved successfully for user_id:", userId, "Data:", dbResponse.data); // ★保存成功ログ
     return NextResponse.json({ message: '口調サンプルを保存しました。', savedData: dbResponse.data }, { status: 200 });
 
   } catch (error) {
