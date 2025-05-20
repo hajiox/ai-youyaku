@@ -1,15 +1,51 @@
-import type React from "react"
-import "./globals.css"
-import type { Metadata } from "next"
-import { ThemeProvider } from "@/components/theme-provider"
-import Header from "@/components/header"
-import Footer from "@/components/footer"
+// app/layout.tsx
+import type { Metadata } from 'next';
+import './globals.css'; // あなたのグローバルCSSファイル
+import Providers from './providers'; // ★★★ これを追加 ★★★
+
+// ★★★ メタデータ定義ここから ★★★
+const siteName = "AI記事要約.com";
+const siteDescription = "記事URLをペーストするだけで、AIがカジュアルまたはフォーマルなスタイルで瞬時に要約。200字と1000字の2パターンで情報収集を効率化します。";
+const siteUrl = "https://youyaku.aizubrandhall-lp2.com";
+const ogImageUrl = `${siteUrl}/aiyouyaku.png`;
 
 export const metadata: Metadata = {
-  title: "会津麺処 - 会津の味を全国へ",
-  description: "会津のラーメン・カツ丼・カレーを提供する専門店です。",
-    generator: 'v0.dev'
-}
+  title: {
+    default: `${siteName} - URLだけで簡単AI記事要約`,
+    template: `%s | ${siteName}`,
+  },
+  description: siteDescription,
+  alternates: {
+    canonical: siteUrl,
+  },
+  openGraph: {
+    title: `${siteName} - AIが記事を瞬時に要約`,
+    description: siteDescription,
+    url: siteUrl,
+    siteName: siteName,
+    images: [
+      {
+        url: ogImageUrl,
+        width: 1200,
+        height: 630,
+        alt: `${siteName} OGP画像`,
+      },
+    ],
+    locale: 'ja_JP',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: `${siteName} - AIが記事を瞬時に要約`,
+    description: siteDescription,
+    images: [ogImageUrl],
+  },
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
+};
+// ★★★ メタデータ定義ここまで ★★★
 
 export default function RootLayout({
   children,
@@ -17,21 +53,11 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="ja" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@400;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="min-h-screen font-sans antialiased">
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-          <Header />
+    <html lang="ja">
+      <body>
+        <Providers> {/* ★★★ ここでchildrenをラップします ★★★ */}
           {children}
-          <Footer />
-        </ThemeProvider>
+        </Providers>
       </body>
     </html>
   )
