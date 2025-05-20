@@ -1,374 +1,323 @@
-// app/page.tsx
+"use client"
 
-"use client";
-
-import { useState, useEffect } from "react";
-import { useSession, signIn, signOut } from "next-auth/react";
-import ToneSampleModal from "./components/ToneSampleModal"; // ★ インポートパスを相対パスに変更
-
-// APIから返ってくる口調サンプルの型 (将来的にGETで使う場合)
-// interface UserToneSampleData {
-//   id: string;
-//   user_id: string;
-//   tone_sample: string;
-//   character_limit: number;
-//   created_at: string;
-//   updated_at: string;
-// }
-
-// 無料ユーザーの口調サンプルの最大文字数 (API側と合わせる)
-const FREE_USER_TONE_SAMPLE_MAX_LENGTH = 1000;
+import { useState, useEffect } from "react"
+import Image from "next/image"
+import Link from "next/link"
+import { Heart, MessageCircle, ChevronLeft, ChevronRight } from "lucide-react"
 
 export default function Home() {
-  const [url, setUrl] = useState("");
-  const [shortSummary, setShortSummary] = useState("");
-  const [longSummary, setLongSummary] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [processedInfo, setProcessedInfo] = useState<{truncated: boolean, originalLength: number, processedLength: number} | null>(null);
-  const [showContactModal, setShowContactModal] = useState(false);
+  const [currentSlide, setCurrentSlide] = useState(0)
+  const [autoplay, setAutoplay] = useState(true)
 
-  const { data: session, status } = useSession();
+  const slides = [
+    {
+      image: "/tomato-curry.png",
+      title: "会津トマトカレー",
+      description: "地元産トマトの甘みと酸味が絶妙な一品",
+    },
+    {
+      image: "/aizu-ramen.png",
+      title: "会津ラーメン",
+      description: "伝統の醤油ベースに地元の食材を活かした逸品",
+    },
+    {
+      image: "/katsudon.png",
+      title: "ソースカツ丼",
+      description: "会津名物、サクサクのカツに特製ソースが絶品",
+    },
+  ]
 
-  const [showToneSampleModal, setShowToneSampleModal] = useState(false);
-  const [currentDbSample, setCurrentDbSample] = useState("");
-  const [isSavingToneSample, setIsSavingToneSample] = useState(false);
-  const [toneSampleError, setToneSampleError] = useState<string | null>(null);
-  const [toneSampleSuccessMessage, setToneSampleSuccessMessage] = useState<string | null>(null);
+  const nextSlide = () => {
+    setCurrentSlide((prev) => (prev === slides.length - 1 ? 0 : prev + 1))
+  }
 
-
-  const handleSummarize = async (selectedTone: "casual" | "formal" /* | "custom" */) => {
-    if (!url) {
-      alert("URLを入力してください");
-      return;
-    }
-    if (isLoading) return;
-
-    setIsLoading(true);
-    setError(null);
-    setShortSummary("");
-    setLongSummary("");
-    setProcessedInfo(null);
-
-    try {
-      const [shortRes, longRes] = await Promise.all([
-        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=short&tone=${selectedTone}`),
-        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=long&tone=${selectedTone}`),
-      ]);
-
-      let shortError = null;
-      let longError = null;
-      let shortData: any = {};
-      let longData: any = {};
-
-      if (!shortRes.ok) {
-        shortError = `200文字要約エラー: ${shortRes.status}`;
-        try { shortData = await shortRes.json(); if(shortData.error) shortError = shortData.error; } catch {}
-      } else {
-        shortData = await shortRes.json();
-      }
-
-      if (!longRes.ok) {
-        longError = `1000文字要約エラー: ${longRes.status}`;
-        try { longData = await longRes.json(); if(longData.error) longError = longData.error; } catch {}
-      } else {
-        longData = await longRes.json();
-      }
-
-      if (shortError || longError) {
-        throw new Error(shortError || longError || "要約中にエラーが発生しました");
-      }
-
-      setShortSummary(shortData.result || "200文字要約の取得に失敗しました");
-      setLongSummary(longData.result || "1000文字要約の取得に失敗しました");
-
-      if (shortData.truncated !== undefined) {
-        setProcessedInfo({
-          truncated: shortData.truncated,
-          originalLength: shortData.originalLength,
-          processedLength: shortData.processedLength,
-        });
-      } else if (longData.truncated !== undefined) {
-          setProcessedInfo({
-          truncated: longData.truncated,
-          originalLength: longData.originalLength,
-          processedLength: longData.processedLength,
-        });
-      }
-
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || "要約中に不明なエラーが発生しました");
-      setShortSummary("");
-      setLongSummary("");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const copyText = (text: string) => {
-    if (!text) return;
-    navigator.clipboard.writeText(text)
-      .then(() => {
-        alert("コピーしました！");
-      })
-      .catch(err => {
-        console.error("コピーに失敗しました: ", err);
-        alert("コピーに失敗しました。");
-      });
-  };
-
-  const handleReset = () => {
-    setUrl("");
-    setShortSummary("");
-    setLongSummary("");
-    setError(null);
-    setIsLoading(false);
-    setProcessedInfo(null);
-  };
+  const prevSlide = () => {
+    setCurrentSlide((prev) => (prev === 0 ? slides.length - 1 : prev - 1))
+  }
 
   useEffect(() => {
-    if (showContactModal || showToneSampleModal) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
+    let interval
+    if (autoplay) {
+      interval = setInterval(() => {
+        nextSlide()
+      }, 5000)
     }
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, [showContactModal, showToneSampleModal]);
+    return () => clearInterval(interval)
+  }, [autoplay, currentSlide])
 
+  const newsItems = [
+    {
+      image: "/news1.png",
+      title: "夏季限定メニュー登場！",
+      date: "2023年6月1日",
+      likes: 24,
+      comments: 5,
+    },
+    {
+      image: "/news2.png",
+      title: "テイクアウト10%オフキャンペーン実施中",
+      date: "2023年5月15日",
+      likes: 18,
+      comments: 3,
+    },
+    {
+      image: "/news3.png",
+      title: "新メニュー「会津山菜ラーメン」登場",
+      date: "2023年4月20日",
+      likes: 32,
+      comments: 7,
+    },
+    {
+      image: "/news4.png",
+      title: "ゴールデンウィーク営業時間のお知らせ",
+      date: "2023年4月10日",
+      likes: 15,
+      comments: 2,
+    },
+  ]
 
-  const handleSaveToneSample = async (sampleToSave: string) => {
-    setIsSavingToneSample(true);
-    setToneSampleError(null);
-    setToneSampleSuccessMessage(null);
-
-    try {
-      const response = await fetch('/api/tone-sample', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ toneSample: sampleToSave }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || '口調サンプルの保存に失敗しました。');
-      }
-      setToneSampleSuccessMessage(result.message || '口調サンプルを保存しました！');
-      setCurrentDbSample(sampleToSave);
-      setTimeout(() => {
-        setShowToneSampleModal(false);
-        // 成功メッセージも少し遅れて消すか、モーダルを閉じるタイミングでクリアする
-        setTimeout(() => setToneSampleSuccessMessage(null), 1500);
-      }, 1500);
-
-    } catch (err: any) {
-      console.error("Failed to save tone sample:", err);
-      setToneSampleError(err.message || '口調サンプルの保存中にエラーが発生しました。');
-    } finally {
-      setIsSavingToneSample(false);
-    }
-  };
-
+  const instagramPhotos = Array(9)
+    .fill(0)
+    .map((_, i) => `/instagram${i + 1}.jpg`)
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-slate-50 text-slate-700 font-sans">
-      <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-lg">
-        <h1 className="text-3xl font-semibold mb-2 text-center text-blue-600">
-          AI記事要約.com
-        </h1>
-        <p className="text-sm text-slate-500 mb-6 text-center">
-          記事URLをペーストして、お好みのスタイルでAIが要約します。
-        </p>
-
-        <div className="text-xs text-slate-500 mb-4 text-right pr-1">
-          {status === "loading" && <p>読込中...</p>}
-          {status === "authenticated" && session?.user && (
-            <div className="flex items-center justify-end space-x-2">
-              {session.user.image && (
-                <img src={session.user.image} alt="avatar" className="w-5 h-5 rounded-full" />
-              )}
-              <span>{session.user.name || session.user.email}</span>
-              <button
-                onClick={() => signOut()}
-                className="px-2 py-0.5 border border-slate-300 rounded hover:bg-slate-100 text-slate-600 text-[10px]"
-              >
-                ログアウト
-              </button>
-            </div>
-          )}
-          {status === "unauthenticated" && (
-            <button
-              onClick={() => signIn("google")}
-              className="px-2 py-0.5 border border-slate-300 rounded hover:bg-slate-100 text-slate-600 text-[10px]"
+    <main className="pt-16">
+      {/* Hero Carousel */}
+      <section className="relative h-[70vh] w-full overflow-hidden">
+        <div className="relative h-full w-full">
+          {slides.map((slide, index) => (
+            <div
+              key={index}
+              className={`absolute inset-0 transition-opacity duration-1000 ${
+                index === currentSlide ? "opacity-100" : "opacity-0"
+              }`}
             >
-              Googleログイン
-            </button>
-          )}
-        </div>
-
-        {status === "authenticated" && (
-          <div className="mb-4 text-center">
-            <button
-              onClick={() => {
-                setToneSampleError(null);
-                setToneSampleSuccessMessage(null);
-                setShowToneSampleModal(true);
-              }}
-              className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-md font-medium hover:bg-slate-200 border border-slate-300"
-            >
-              自分の口調を登録・編集する
-            </button>
-          </div>
-        )}
-
-        <div className="mb-4">
-          <input
-            type="text"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="記事URLを入力"
-            className="w-full text-base p-3 border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-            disabled={isLoading}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <button
-            onClick={() => handleSummarize("casual")}
-            className={`w-full px-4 py-2.5 bg-sky-500 text-white text-base rounded-md font-medium hover:bg-sky-600 active:bg-sky-700 transition-colors focus:outline-none focus:ring-1 focus:ring-sky-400 focus:ring-offset-1 ${
-              isLoading ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-            disabled={isLoading}
-          >
-            {isLoading ? "処理中..." : "カジュアル"}
-          </button>
-          <button
-            onClick={() => handleSummarize("formal")}
-            className={`w-full px-4 py-2.5 bg-indigo-500 text-white text-base rounded-md font-medium hover:bg-indigo-600 active:bg-indigo-700 transition-colors focus:outline-none focus:ring-1 focus:ring-indigo-400 focus:ring-offset-1 ${
-              isLoading ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-            disabled={isLoading}
-          >
-            {isLoading ? "処理中..." : "フォーマル"}
-          </button>
-        </div>
-        <div className="flex justify-center mb-6">
-          <button
-            onClick={handleReset}
-            className="w-auto px-6 py-2 bg-slate-400 text-white text-base rounded-md font-medium hover:bg-slate-500 active:bg-slate-600 transition-colors focus:outline-none focus:ring-1 focus:ring-slate-300 focus:ring-offset-1"
-            disabled={isLoading && !url && !shortSummary && !longSummary && !error}
-          >
-            リセット
-          </button>
-        </div>
-
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-300 text-red-600 rounded-md text-sm">
-            <p>{error}</p>
-          </div>
-        )}
-
-        {processedInfo && processedInfo.truncated && (
-          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-300 text-yellow-600 rounded-md text-sm">
-            <p>ℹ️ 記事が長いため、先頭{processedInfo.processedLength.toLocaleString()}文字で要約しました。(原文: {processedInfo.originalLength.toLocaleString()}文字)</p>
-          </div>
-        )}
-
-        {shortSummary && (
-          <div className="mt-6 p-4 border border-slate-200 rounded-md bg-white">
-            <div className="flex justify-between items-center mb-2">
-              <h2 className="text-lg font-semibold text-slate-700">200字要約</h2>
-              <button
-                onClick={() => copyText(shortSummary)}
-                className="text-xs text-white bg-slate-500 px-3 py-1 rounded hover:bg-slate-600 transition-colors"
-              >
-                コピー
-              </button>
+              <Image
+                src={slide.image || "/placeholder.svg"}
+                alt={slide.title}
+                fill
+                className="object-cover"
+                priority={index === 0}
+              />
+              <div className="absolute inset-0 bg-black/30" />
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-white">
+                <h1 className="mb-4 font-serif text-5xl font-bold tracking-tight sm:text-6xl md:text-7xl">
+                  {slide.title}
+                </h1>
+                <p className="text-xl font-medium sm:text-2xl">{slide.description}</p>
+              </div>
             </div>
-            <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap break-words">{shortSummary}</p>
-          </div>
-        )}
-
-        {longSummary && (
-          <div className="mt-4 p-4 border border-slate-200 rounded-md bg-white">
-            <div className="flex justify-between items-center mb-2">
-              <h2 className="text-lg font-semibold text-slate-700">1000字要約</h2>
-              <button
-                onClick={() => copyText(longSummary)}
-                className="text-xs text-white bg-slate-500 px-3 py-1 rounded hover:bg-slate-600 transition-colors"
-              >
-                コピー
-              </button>
-            </div>
-            <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap break-words">{longSummary}</p>
-          </div>
-        )}
-      </div>
-
-      <footer className="text-center mt-8 text-xs text-slate-400">
-        <p className="mb-1">
-          <button
-            onClick={() => setShowContactModal(true)}
-            className="hover:underline focus:outline-none"
-          >
-            ご連絡はこちら
-          </button>
-        </p>
-        <p className="mb-1 text-[10px] leading-tight px-2">
-          当サイトは、Amazon.co.jpを宣伝しリンクすることによってサイトが紹介料を獲得できる手段を提供することを目的に設定されたアフィリエイトプログラムである、Amazonアソシエイト・プログラムの参加者です。
-        </p>
-        <p className="mt-1">© {new Date().getFullYear()} AI記事要約.com</p>
-      </footer>
-
-      {showContactModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-slate-700">ご連絡</h2>
-              <button
-                onClick={() => setShowContactModal(false)}
-                className="text-slate-500 hover:text-slate-700 text-2xl font-bold"
-              >
-                ×
-              </button>
-            </div>
-            <p className="text-sm text-slate-600 mb-4">
-              ご意見、ご感想、その他お問い合わせは、以下のメールアドレス宛にお願いいたします。
+          ))}
+          <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center justify-center pb-8">
+            <p className="mb-6 text-center text-xl font-medium text-white">
+              会津の味を全国へ──ラーメンとカツ丼とカレーの専門店
             </p>
-            <a
-              href="mailto:ts@ai.aizu-tv.com?subject=AI記事要約.comへのお問い合わせ"
-              className="block w-full text-center px-4 py-2.5 bg-blue-500 text-white text-base rounded-md font-medium hover:bg-blue-600 transition-colors"
-              onClick={() => setShowContactModal(false)}
+            <div className="flex gap-2">
+              {slides.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => {
+                    setCurrentSlide(index)
+                    setAutoplay(false)
+                  }}
+                  className={`h-3 w-3 rounded-full ${index === currentSlide ? "bg-white" : "bg-white/50"}`}
+                  aria-label={`スライド ${index + 1} に移動`}
+                />
+              ))}
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              prevSlide()
+              setAutoplay(false)
+            }}
+            className="absolute left-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/30 text-white backdrop-blur-sm transition-colors hover:bg-white/50"
+            aria-label="前のスライド"
+          >
+            <ChevronLeft className="h-6 w-6" />
+          </button>
+          <button
+            onClick={() => {
+              nextSlide()
+              setAutoplay(false)
+            }}
+            className="absolute right-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/30 text-white backdrop-blur-sm transition-colors hover:bg-white/50"
+            aria-label="次のスライド"
+          >
+            <ChevronRight className="h-6 w-6" />
+          </button>
+        </div>
+      </section>
+
+      {/* 三大ラーメン紹介 */}
+      <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
+        <h2 className="mb-12 text-center font-serif text-3xl font-bold text-gray-800 sm:text-4xl">会津三大ラーメン</h2>
+        <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
+          {[
+            {
+              name: "会津醤油ラーメン",
+              description: "伝統の醤油ダレと鶏ガラスープが生み出す深い味わい",
+              image: "/shoyu-ramen.png",
+            },
+            {
+              name: "会津味噌ラーメン",
+              description: "地元の味噌を使用した、コクのある一杯",
+              image: "/miso-ramen.png",
+            },
+            {
+              name: "会津塩ラーメン",
+              description: "あっさりとした中にも旨味が凝縮された塩ラーメン",
+              image: "/shio-ramen.png",
+            },
+          ].map((ramen, index) => (
+            <div
+              key={index}
+              className="group overflow-hidden rounded-2xl bg-white shadow-md transition-all hover:shadow-lg"
             >
-              メールで問い合わせる
-            </a>
-            <button
-              onClick={() => setShowContactModal(false)}
-              className="mt-3 block w-full text-center px-4 py-2.5 bg-slate-200 text-slate-700 text-base rounded-md font-medium hover:bg-slate-300 transition-colors"
-            >
-              閉じる
-            </button>
+              <div className="relative h-64 w-full overflow-hidden">
+                <Image
+                  src={ramen.image || "/placeholder.svg"}
+                  alt={ramen.name}
+                  fill
+                  className="object-cover transition-transform duration-300 group-hover:scale-105"
+                />
+              </div>
+              <div className="p-6">
+                <h3 className="mb-2 font-serif text-xl font-bold text-gray-800">{ramen.name}</h3>
+                <p className="mb-4 text-gray-600">{ramen.description}</p>
+                <Link
+                  href="/aizu-ramen"
+                  className="inline-flex items-center text-red-600 transition-colors hover:text-red-700"
+                >
+                  クリックで詳細 <ChevronRight className="ml-1 h-4 w-4" />
+                </Link>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 特徴セクション（4色ボックス） */}
+      <section className="bg-gray-50 py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <h2 className="mb-12 text-center font-serif text-3xl font-bold text-gray-800 sm:text-4xl">当店の特徴</h2>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              {
+                title: "美味しい",
+                description: "厳選された食材と伝統の技法で作る本格的な味わい",
+                color: "bg-amber-100 text-amber-800 border-amber-200",
+              },
+              {
+                title: "リーズナブル",
+                description: "高品質な料理をお手頃価格でご提供",
+                color: "bg-red-100 text-red-800 border-red-200",
+              },
+              {
+                title: "早い",
+                description: "効率的な調理システムで待ち時間を短縮",
+                color: "bg-blue-100 text-blue-800 border-blue-200",
+              },
+              {
+                title: "テイクアウト",
+                description: "ご自宅でも当店の味をお楽しみいただけます",
+                color: "bg-green-100 text-green-800 border-green-200",
+              },
+            ].map((feature, index) => (
+              <div
+                key={index}
+                className={`rounded-2xl border-2 p-6 text-center shadow-sm transition-transform hover:scale-[1.02] ${feature.color}`}
+              >
+                <h3 className="mb-3 text-xl font-bold">{feature.title}</h3>
+                <p>{feature.description}</p>
+              </div>
+            ))}
           </div>
         </div>
-      )}
+      </section>
 
-      {showToneSampleModal && (
-        <ToneSampleModal
-          isOpen={showToneSampleModal}
-          onClose={() => setShowToneSampleModal(false)}
-          currentSample={currentDbSample}
-          onSave={handleSaveToneSample}
-          maxLength={FREE_USER_TONE_SAMPLE_MAX_LENGTH}
-          isSaving={isSavingToneSample}
-          saveError={toneSampleError}
-          saveSuccessMessage={toneSampleSuccessMessage}
-        />
-      )}
+      {/* 季節メニュー */}
+      <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
+        <div className="overflow-hidden rounded-3xl bg-white shadow-lg">
+          <div className="relative h-96 w-full sm:h-[500px]">
+            <Image src="/aspara-tanmen.png" alt="アスパラタンメン" fill className="object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 p-8 text-white">
+              <h2 className="mb-2 font-serif text-3xl font-bold sm:text-4xl">季節限定メニュー</h2>
+              <p className="text-xl font-medium">アスパラタンメン好評販売中！5月下旬まで</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 新着情報 */}
+      <section className="bg-gray-50 py-20">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <h2 className="mb-12 text-center font-serif text-3xl font-bold text-gray-800 sm:text-4xl">新着情報</h2>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {newsItems.map((item, index) => (
+              <div
+                key={index}
+                className="overflow-hidden rounded-2xl bg-white shadow-md transition-all hover:shadow-lg"
+              >
+                <div className="relative h-48 w-full">
+                  <Image src={item.image || "/placeholder.svg"} alt={item.title} fill className="object-cover" />
+                </div>
+                <div className="p-4">
+                  <p className="mb-1 text-sm text-gray-500">{item.date}</p>
+                  <h3 className="mb-3 font-medium">{item.title}</h3>
+                  <div className="flex items-center justify-between text-sm text-gray-500">
+                    <div className="flex items-center">
+                      <Heart className="mr-1 h-4 w-4" />
+                      <span>{item.likes}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <MessageCircle className="mr-1 h-4 w-4" />
+                      <span>{item.comments}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-10 text-center">
+            <Link
+              href="/news"
+              className="inline-block rounded-full border-2 border-red-600 px-6 py-2 font-medium text-red-600 transition-colors hover:bg-red-600 hover:text-white"
+            >
+              もっと見る
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Instagramギャラリー */}
+      <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
+        <h2 className="mb-12 text-center font-serif text-3xl font-bold text-gray-800 sm:text-4xl">Instagram</h2>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:gap-6">
+          {instagramPhotos.map((photo, index) => (
+            <div key={index} className="aspect-square overflow-hidden rounded-2xl">
+              <Image
+                src={photo || "/placeholder.svg"}
+                alt={`Instagram photo ${index + 1}`}
+                width={400}
+                height={400}
+                className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+              />
+            </div>
+          ))}
+        </div>
+        <div className="mt-10 text-center">
+          <a
+            href="https://www.instagram.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center font-medium text-red-600 transition-colors hover:text-red-700"
+          >
+            Instagramでフォローする <ChevronRight className="ml-1 h-4 w-4" />
+          </a>
+        </div>
+      </section>
     </main>
-  );
+  )
 }
