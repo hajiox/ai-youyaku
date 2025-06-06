@@ -158,3 +158,107 @@ export async function GET(req: Request) {
     );
   }
 }
+
+// POSTリクエストではカスタム口調を指定できる
+export async function POST(req: Request) {
+  const { url, mode, tone, toneSample } = await req.json()
+
+  if (!url || !mode || (mode !== 'short' && mode !== 'long')) {
+    return NextResponse.json(
+      { error: 'リクエストが無効です。url と mode (short または long) を指定してください。' },
+      { status: 400 }
+    )
+  }
+
+  if (tone !== 'casual' && tone !== 'formal' && tone !== 'custom') {
+    return NextResponse.json(
+      { error: '無効なトーンが指定されました。casual、formal、または custom を指定してください。' },
+      { status: 400 }
+    )
+  }
+
+  if (tone === 'custom' && typeof toneSample !== 'string') {
+    return NextResponse.json(
+      { error: 'toneSample が必要です。' },
+      { status: 400 }
+    )
+  }
+
+  const fetchResult = await fetchUrlContent(url)
+
+  if (fetchResult.error || !fetchResult.content) {
+    return NextResponse.json(
+      { error: fetchResult.error || `URL (${url}) からコンテンツを取得または処理できませんでした。`, truncated: false, originalLength: fetchResult.originalLength, processedLength: fetchResult.processedLength },
+      { status: 500 }
+    )
+  }
+
+  const webContent = fetchResult.content
+  const truncated = fetchResult.truncated
+  const originalLength = fetchResult.originalLength
+  const processedLength = fetchResult.processedLength
+
+  const targetLengthDescription = mode === 'short' ? '200文字程度の短い' : '1000文字程度の詳細な'
+
+  let toneInstruction = ''
+  if (tone === 'formal') {
+    toneInstruction = `この記事の内容を、ビジネスレポートや学術的な文脈に適した、客観的かつフォーマルな文体で`
+  } else if (tone === 'custom') {
+    toneInstruction = `次の口調サンプルを参考に、同じ文体で` + '\n' + toneSample + '\n'
+  } else {
+    toneInstruction = `この記事の内容を、友人に話すようなカジュアルで、親しみやすく分かりやすい口調で`
+  }
+
+  let prompt = `${toneInstruction}、日本語で${targetLengthDescription}要約にしてください。\n\nテキスト:\n${webContent}`
+  if (truncated) {
+    prompt = `以下のテキストは、元記事の先頭${MAX_INPUT_CHAR_LENGTH}文字分です（元記事の全長は${originalLength}文字）。\n${prompt}`
+  }
+
+  try {
+    const apiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      cache: 'no-store',
+    })
+
+    if (!apiRes.ok) {
+      const errorBody = await apiRes.text()
+      console.error('OpenAI APIエラー ステータス:', apiRes.status, '本文:', errorBody)
+      return NextResponse.json(
+        { error: `OpenAI APIリクエストに失敗しました (ステータス: ${apiRes.status})`, details: errorBody, truncated, originalLength, processedLength },
+        { status: apiRes.status }
+      )
+    }
+
+    const data = await apiRes.json()
+    const text = data.choices?.[0]?.message?.content?.trim() || ''
+
+    if (!text) {
+      console.warn('OpenAIからの応答に要約テキストが含まれていませんでした。', data)
+      return NextResponse.json(
+        { error: 'OpenAIからの応答に要約テキストが含まれていませんでした。', truncated, originalLength, processedLength },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ result: text, truncated, originalLength, processedLength })
+  } catch (err) {
+    console.error('APIハンドラエラー:', err)
+    if (err instanceof Error) {
+      console.error('エラーメッセージ:', err.message)
+      console.error('スタックトレース:', err.stack)
+    }
+    return NextResponse.json(
+      { error: 'サーバー内部エラーが発生しました。', truncated: false, originalLength: 0, processedLength: 0 },
+      { status: 500 }
+    )
+  }
+}
+

@@ -37,12 +37,19 @@ export default function Home() {
   const [toneSampleSuccessMessage, setToneSampleSuccessMessage] = useState<string | null>(null);
 
 
-  const handleSummarize = async (selectedTone: "casual" | "formal" /* | "custom" */) => {
+  const handleSummarize = async (
+    selectedTone: "casual" | "formal" | "custom"
+  ) => {
     if (!url) {
       alert("URLを入力してください");
       return;
     }
     if (isLoading) return;
+
+    if (selectedTone === "custom" && !currentDbSample) {
+      alert("自分の口調サンプルが登録されていません。");
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
@@ -51,10 +58,24 @@ export default function Home() {
     setProcessedInfo(null);
 
     try {
-      const [shortRes, longRes] = await Promise.all([
-        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=short&tone=${selectedTone}`),
-        fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=long&tone=${selectedTone}`),
-      ]);
+      const requests = selectedTone === "custom"
+        ? [
+            fetch('/api/summary', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url, mode: 'short', tone: 'custom', toneSample: currentDbSample })
+            }),
+            fetch('/api/summary', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url, mode: 'long', tone: 'custom', toneSample: currentDbSample })
+            })
+          ]
+        : [
+            fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=short&tone=${selectedTone}`),
+            fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=long&tone=${selectedTone}`)
+          ];
+      const [shortRes, longRes] = await Promise.all(requests);
 
       let shortError = null;
       let longError = null;
@@ -137,6 +158,22 @@ export default function Home() {
       document.body.style.overflow = 'unset';
     };
   }, [showContactModal, showToneSampleModal]);
+
+  // ログイン後に口調サンプルを取得
+  useEffect(() => {
+    if (status === "authenticated") {
+      fetch('/api/tone-sample', { cache: 'no-store' })
+        .then(res => res.json())
+        .then(data => {
+          if (data.toneSample !== undefined) {
+            setCurrentDbSample(data.toneSample);
+          }
+        })
+        .catch(err => console.error('Failed to fetch tone sample', err));
+    } else {
+      setCurrentDbSample("");
+    }
+  }, [status]);
 
 
   const handleSaveToneSample = async (sampleToSave: string) => {
@@ -237,7 +274,7 @@ export default function Home() {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className={`grid gap-3 mb-4 ${status === 'authenticated' ? 'grid-cols-3' : 'grid-cols-2'}`}>
           <button
             onClick={() => handleSummarize("casual")}
             className={`w-full px-4 py-2.5 bg-sky-500 text-white text-base rounded-md font-medium hover:bg-sky-600 active:bg-sky-700 transition-colors focus:outline-none focus:ring-1 focus:ring-sky-400 focus:ring-offset-1 ${
@@ -256,6 +293,17 @@ export default function Home() {
           >
             {isLoading ? "処理中..." : "フォーマル"}
           </button>
+          {status === "authenticated" && (
+            <button
+              onClick={() => handleSummarize("custom")}
+              className={`w-full px-4 py-2.5 bg-green-600 text-white text-base rounded-md font-medium hover:bg-green-700 active:bg-green-800 transition-colors focus:outline-none focus:ring-1 focus:ring-green-400 focus:ring-offset-1 ${
+                isLoading || !currentDbSample ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+              disabled={isLoading || !currentDbSample}
+            >
+              {isLoading ? "処理中..." : "自分の口調"}
+            </button>
+          )}
         </div>
         <div className="flex justify-center mb-6">
           <button
