@@ -35,6 +35,20 @@ export default function Home() {
   const [isSavingToneSample, setIsSavingToneSample] = useState(false);
   const [toneSampleError, setToneSampleError] = useState<string | null>(null);
   const [toneSampleSuccessMessage, setToneSampleSuccessMessage] = useState<string | null>(null);
+  const [amazonKeywords, setAmazonKeywords] = useState<string[]>([]);
+
+  const extractKeywords = (text: string, max: number = 3): string[] => {
+    const tokens = text.match(/[\p{Script=Han}々]+|[ァ-ヶー]+|[a-zA-Z]+/gu) || [];
+    const freq: Record<string, number> = {};
+    tokens.forEach((t) => {
+      if (t.length < 2) return;
+      freq[t] = (freq[t] || 0) + 1;
+    });
+    return Object.entries(freq)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, max)
+      .map(([w]) => w);
+  };
 
 
   const handleSummarize = async (
@@ -174,6 +188,16 @@ export default function Home() {
       setCurrentDbSample("");
     }
   }, [status]);
+
+  // 要約文からAmazon検索用キーワードを抽出
+  useEffect(() => {
+    const summaryText = longSummary || shortSummary;
+    if (summaryText) {
+      setAmazonKeywords(extractKeywords(summaryText, 3));
+    } else {
+      setAmazonKeywords([]);
+    }
+  }, [shortSummary, longSummary]);
 
 
   const handleSaveToneSample = async (sampleToSave: string) => {
@@ -356,6 +380,24 @@ export default function Home() {
               </button>
             </div>
             <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap break-words">{longSummary}</p>
+          </div>
+        )}
+
+        {amazonKeywords.length > 0 && (
+          <div className="mt-4 p-4 border border-slate-200 rounded-md bg-white">
+            <ul className="list-disc list-inside text-sm text-blue-600 space-y-1">
+              {amazonKeywords.map((kw, idx) => (
+                <li key={idx}>
+                  <a
+                    href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(kw)}&tag=aizubrandhall-22`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Amazonで「{kw}」の商品を探す
+                  </a>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </div>
