@@ -95,7 +95,8 @@ export async function GET(req: Request) {
   const processedLength = fetchResult.processedLength;
 
 
-  const targetLengthDescription = mode === "short" ? "200文字程度の短い" : "1000文字程度の詳細な";
+  const targetLengthDescription = mode === "short" ? "200文字以内の" : "1000文字以内の";
+  const outputCharLimit = mode === "short" ? 200 : 1000;
   
   let toneInstruction = "";
   if (tone === 'formal') {
@@ -135,7 +136,10 @@ export async function GET(req: Request) {
     }
 
     const data = await apiRes.json();
-    const text = data.choices?.[0]?.message?.content?.trim() || "";
+    let text = data.choices?.[0]?.message?.content?.trim() || "";
+    if (text.length > outputCharLimit) {
+        text = text.slice(0, outputCharLimit);
+    }
 
     if (!text) {
         console.warn("OpenAIからの応答に要約テキストが含まれていませんでした。", data);
@@ -198,7 +202,8 @@ export async function POST(req: Request) {
   const originalLength = fetchResult.originalLength
   const processedLength = fetchResult.processedLength
 
-  const targetLengthDescription = mode === 'short' ? '200文字程度の短い' : '1000文字程度の詳細な'
+  const targetLengthDescription = mode === 'short' ? '200文字以内の' : '1000文字以内の'
+  const outputCharLimit = mode === 'short' ? 200 : 1000
 
   let toneInstruction = ''
   if (tone === 'formal') {
@@ -238,7 +243,10 @@ export async function POST(req: Request) {
     }
 
     const data = await apiRes.json()
-    const text = data.choices?.[0]?.message?.content?.trim() || ''
+    let text = data.choices?.[0]?.message?.content?.trim() || ''
+    if (text.length > outputCharLimit) {
+      text = text.slice(0, outputCharLimit)
+    }
 
     if (!text) {
       console.warn('OpenAIからの応答に要約テキストが含まれていませんでした。', data)
