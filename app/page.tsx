@@ -261,7 +261,9 @@ export default function Home() {
           <button
             onClick={handleReset}
             className="w-auto px-6 py-2 bg-slate-400 text-white text-base rounded-md font-medium hover:bg-slate-500 active:bg-slate-600 transition-colors focus:outline-none focus:ring-1 focus:ring-slate-300 focus:ring-offset-1"
-            disabled={isLoading && !url && !shortSummary && !longSummary && !error}
+            disabled={
+              isLoading || (!url && !shortSummary && !longSummary && !error)
+            }
           >
             リセット
           </button>
