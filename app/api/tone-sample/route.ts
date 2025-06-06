@@ -40,3 +40,25 @@ export async function POST(req: Request) {
   // 4. 成功レスポンス
   return NextResponse.json({ message: '口調サンプルを保存しました。', data }, { status: 200 });
 }
+
+// 既存の口調サンプルを取得するエンドポイント
+export async function GET(req: Request) {
+  const session = await getServerSession(authOptions)
+  const userId  = session?.user?.id
+  if (!userId) {
+    return NextResponse.json({ error: '認証されていません。' }, { status: 401 })
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('user_tone_samples')
+    .select('tone_sample')
+    .eq('user_id', userId)
+    .single()
+
+  if (error && error.code !== 'PGRST116') {
+    console.error('TONE SAMPLE FETCH ERROR', error)
+    return NextResponse.json({ error: '口調サンプルの取得に失敗しました。' }, { status: 500 })
+  }
+
+  return NextResponse.json({ toneSample: data?.tone_sample || '' }, { status: 200 })
+}
