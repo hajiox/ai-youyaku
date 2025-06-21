@@ -1,6 +1,7 @@
 // app/api/summary/route.ts
 
 import { NextResponse } from "next/server";
+import { buildMessages } from "@/lib/buildMessages";
 
 export const runtime = "edge";
 
@@ -96,19 +97,13 @@ export async function GET(req: Request) {
 
 
   const targetLengthDescription = mode === "short" ? "200文字程度の短い" : "1000文字程度の詳細な";
-  
-  let toneInstruction = "";
-  if (tone === 'formal') {
-    toneInstruction = `この記事の内容を、ビジネスレポートや学術的な文脈に適した、客観的かつフォーマルな文体で`;
-  } else {
-    toneInstruction = `この記事の内容を、友人に話すようなカジュアルで、親しみやすく分かりやすい口調で`;
+
+  let articleContent = `${webContent}\n\n日本語で${targetLengthDescription}要約してください。`;
+  if (truncated) {
+    articleContent = `以下のテキストは、元記事の先頭${MAX_INPUT_CHAR_LENGTH}文字分です（元記事の全長は${originalLength}文字）。\n${articleContent}`;
   }
 
-  let prompt = `${toneInstruction}、日本語で${targetLengthDescription}要約にしてください。\n\nテキスト:\n${webContent}`;
-  if (truncated) {
-    // プロンプトにトリミング情報を加えるのは任意ですが、AIの理解を助ける可能性があります。
-    prompt = `以下のテキストは、元記事の先頭${MAX_INPUT_CHAR_LENGTH}文字分です（元記事の全長は${originalLength}文字）。\n${prompt}`;
-  }
+  const messages = buildMessages(tone as any, articleContent);
 
 
   try {
@@ -120,7 +115,7 @@ export async function GET(req: Request) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
+        messages,
       }),
       cache: 'no-store'
     });
@@ -200,19 +195,12 @@ export async function POST(req: Request) {
 
   const targetLengthDescription = mode === 'short' ? '200文字程度の短い' : '1000文字程度の詳細な'
 
-  let toneInstruction = ''
-  if (tone === 'formal') {
-    toneInstruction = `この記事の内容を、ビジネスレポートや学術的な文脈に適した、客観的かつフォーマルな文体で`
-  } else if (tone === 'custom') {
-    toneInstruction = `次の口調サンプルを参考に、同じ文体で` + '\n' + toneSample + '\n'
-  } else {
-    toneInstruction = `この記事の内容を、友人に話すようなカジュアルで、親しみやすく分かりやすい口調で`
+  let articleContent = `${webContent}\n\n日本語で${targetLengthDescription}要約してください。`
+  if (truncated) {
+    articleContent = `以下のテキストは、元記事の先頭${MAX_INPUT_CHAR_LENGTH}文字分です（元記事の全長は${originalLength}文字）。\n${articleContent}`
   }
 
-  let prompt = `${toneInstruction}、日本語で${targetLengthDescription}要約にしてください。\n\nテキスト:\n${webContent}`
-  if (truncated) {
-    prompt = `以下のテキストは、元記事の先頭${MAX_INPUT_CHAR_LENGTH}文字分です（元記事の全長は${originalLength}文字）。\n${prompt}`
-  }
+  const messages = buildMessages(tone as any, articleContent, toneSample)
 
   try {
     const apiRes = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -223,7 +211,7 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
+        messages,
       }),
       cache: 'no-store',
     })
