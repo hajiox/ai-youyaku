@@ -72,6 +72,7 @@ export default function ToneSampleModal({
         </p>
         <textarea
           rows={8}
+          maxLength={maxLength}
           className="w-full text-sm p-2 border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 mb-2 resize-y"
           placeholder="ここに口調サンプルを入力..."
           value={sampleText}
