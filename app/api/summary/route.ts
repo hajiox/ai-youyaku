@@ -74,9 +74,9 @@ export async function GET(req: Request) {
       { status: 400 }
     );
   }
-  if (tone !== 'casual' && tone !== 'formal') {
+  if (tone !== 'casual' && tone !== 'formal' && tone !== 'custom') {
     return NextResponse.json(
-        { error: "無効なトーンが指定されました。casual または formal を指定してください。" },
+        { error: "無効なトーンが指定されました。casual、formal、または custom を指定してください。" },
         { status: 400 }
     );
   }
