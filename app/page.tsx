@@ -52,7 +52,7 @@ export default function Home() {
 
 
   const handleSummarize = async (
-    selectedTone: "casual" | "formal" | "custom" | "satomasahiko"
+    selectedTone: "casual" | "formal" | "custom"
   ) => {
     if (!url) {
       alert("URLを入力してください");
@@ -298,7 +298,7 @@ export default function Home() {
           />
         </div>
 
-        <div className={`grid gap-3 mb-4 ${status === 'authenticated' ? 'grid-cols-4' : 'grid-cols-3'}`}>
+        <div className={`grid gap-3 mb-4 ${status === 'authenticated' ? 'grid-cols-3' : 'grid-cols-2'}`}>
           <button
             onClick={() => handleSummarize("casual")}
             className={`w-full px-4 py-2.5 bg-sky-500 text-white text-base rounded-md font-medium hover:bg-sky-600 active:bg-sky-700 transition-colors focus:outline-none focus:ring-1 focus:ring-sky-400 focus:ring-offset-1 ${
@@ -316,15 +316,6 @@ export default function Home() {
             disabled={isLoading}
           >
             {isLoading ? "処理中..." : "フォーマル"}
-          </button>
-          <button
-            onClick={() => handleSummarize("satomasahiko")}
-            className={`w-full px-4 py-2.5 bg-pink-500 text-white text-base rounded-md font-medium hover:bg-pink-600 active:bg-pink-700 transition-colors focus:outline-none focus:ring-1 focus:ring-pink-400 focus:ring-offset-1 ${
-              isLoading ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-            disabled={isLoading}
-          >
-            {isLoading ? "処理中..." : "佐藤正彦風"}
           </button>
           {status === "authenticated" && (
             <button
