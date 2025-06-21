@@ -5,7 +5,7 @@ import { authOptions }     from '@/app/api/auth/[...nextauth]/route';
 import { supabaseAdmin }   from '@/lib/supabaseAdmin';
 
 // 無料ユーザーの口調サンプル上限
-const FREE_USER_TONE_SAMPLE_MAX = 1000;
+const FREE_USER_TONE_SAMPLE_MAX = 2000;
 
 export async function POST(req: Request) {
   // 1. 認証チェック

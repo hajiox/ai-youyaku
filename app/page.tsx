@@ -17,7 +17,7 @@ import ToneSampleModal from "./components/ToneSampleModal"; // ★ インポー�
 // }
 
 // 無料ユーザーの口調サンプルの最大文字数 (API側と合わせる)
-const FREE_USER_TONE_SAMPLE_MAX_LENGTH = 1000;
+const FREE_USER_TONE_SAMPLE_MAX_LENGTH = 2000;
 
 export default function Home() {
   const [url, setUrl] = useState("");
