@@ -334,7 +334,7 @@ const signRequest = (
       "content-type": contentType,
       "x-amz-date": amzDate,
       "x-amz-target": TARGET,
-      "x-amz-content-sha256": payloadHash,
+      host,
       "User-Agent": "AIKijiYoyaku/1.0",
       Authorization: authorization,
     },
@@ -437,17 +437,11 @@ export async function POST(req: NextRequest) {
   const marketplace = AMAZON_MARKETPLACE || DEFAULT_MARKETPLACE;
 
   const baseBody: Omit<SearchItemsPayload, "Keywords"> = {
-    ItemCount: 6,
+    ItemCount: 5,
     PartnerTag: partnerTag,
     PartnerType: "Associates",
     Marketplace: marketplace,
-    Resources: [
-      "Images.Primary.Medium",
-      "ItemInfo.Title",
-      "Offers.Listings.Price",
-      "CustomerReviews.Count",
-      "CustomerReviews.StarRating",
-    ],
+    Resources: ["ItemInfo.Title"],
     SearchIndex: "All",
   };
 
