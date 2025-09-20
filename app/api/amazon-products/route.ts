@@ -334,7 +334,7 @@ const signRequest = (
       "content-type": contentType,
       "x-amz-date": amzDate,
       "x-amz-target": TARGET,
-      host,
+      host: host,
       "User-Agent": "AIKijiYoyaku/1.0",
       Authorization: authorization,
     },
@@ -478,7 +478,15 @@ export async function POST(req: NextRequest) {
       if (!response.ok) {
         const errorBody = await response.text();
         console.error("Amazon API error", response.status, errorBody);
-        continue;
+
+        return NextResponse.json(
+          {
+            products: [],
+            error: `Amazon API error ${response.status}`,
+            details: errorBody,
+          },
+          { status: 200 }
+        );
       }
 
       const data = await response.json();
