@@ -290,18 +290,20 @@ const signRequest = (
   const method = "POST";
   const canonicalUri = "/paapi5/searchitems";
   const canonicalQuery = "";
-  const contentType = "application/json; charset=utf-8";
+  const contentType = "application/json; charset=UTF-8";
   const now = new Date();
   const amzDate = now.toISOString().replace(/[:-]|\..+/g, "");
   const dateStamp = amzDate.slice(0, 8);
 
+  const payloadHash = crypto.createHash("sha256").update(body).digest("hex");
   const canonicalHeaders =
     `content-type:${contentType}\n` +
     `host:${host}\n` +
+    `x-amz-content-sha256:${payloadHash}\n` +
     `x-amz-date:${amzDate}\n` +
     `x-amz-target:${TARGET}\n`;
-  const signedHeaders = "content-type;host;x-amz-date;x-amz-target";
-  const payloadHash = crypto.createHash("sha256").update(body).digest("hex");
+  const signedHeaders =
+    "content-type;host;x-amz-content-sha256;x-amz-date;x-amz-target";
   const canonicalRequest = [
     method,
     canonicalUri,
@@ -334,8 +336,8 @@ const signRequest = (
       "content-type": contentType,
       "x-amz-date": amzDate,
       "x-amz-target": TARGET,
-      host,
-      "User-Agent": "AIKijiYoyaku/1.0",
+      "x-amz-content-sha256": payloadHash,
+      "User-Agent": "AIKijiYoyaku/1.0 (+support@aizubrandhall.jp)",
       Authorization: authorization,
     },
     path: canonicalUri,
