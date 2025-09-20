@@ -65,7 +65,8 @@
     "vaul": "^0.9.6",
     "zod": "^3.24.1",
     "next-auth": "latest",
-    "@supabase/supabase-js": "^2.44.1"
+    "@supabase/supabase-js": "^2.44.1",
+    "amazon-paapi": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^22",
