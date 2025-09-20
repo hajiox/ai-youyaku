@@ -151,6 +151,75 @@ const FALLBACK_PRODUCTS: FallbackProduct[] = [
   },
 ];
 
+const AIZU_BRAND_PRODUCTS: AmazonProduct[] = [
+  {
+    asin: "AIZU-URUSHI-CHOPSTICKS",
+    title: "会津塗 蒔絵夫婦箸セット（桜）",
+    url: "https://aizu-brandkan.com/shopdetail/000000000001/",
+    imageUrl:
+      "https://aizu-brandkan.com/shopimages/hpgi/0000000000012.jpg",
+    price: "¥4,180",
+    amount: 4180,
+    currency: "JPY",
+    matchedKeywords: [],
+  },
+  {
+    asin: "AIZU-MOMEN-STOLE",
+    title: "会津木綿 ハンドメイドストール（藍色）",
+    url: "https://aizu-brandkan.com/shopdetail/000000000245/",
+    imageUrl:
+      "https://aizu-brandkan.com/shopimages/hpgi/0000000000245.jpg",
+    price: "¥6,050",
+    amount: 6050,
+    currency: "JPY",
+    matchedKeywords: [],
+  },
+  {
+    asin: "AIZU-AKABEKO-M",
+    title: "会津張子 赤べこ（中）",
+    url: "https://aizu-brandkan.com/shopdetail/000000000072/",
+    imageUrl:
+      "https://aizu-brandkan.com/shopimages/hpgi/0000000000072.jpg",
+    price: "¥2,200",
+    amount: 2200,
+    currency: "JPY",
+    matchedKeywords: [],
+  },
+  {
+    asin: "AIZU-SAKE-SUEHIRO",
+    title: "末廣酒造 純米吟醸 伝承山廃 720ml",
+    url: "https://aizu-brandkan.com/shopdetail/000000000356/",
+    imageUrl:
+      "https://aizu-brandkan.com/shopimages/hpgi/0000000000356.jpg",
+    price: "¥1,980",
+    amount: 1980,
+    currency: "JPY",
+    matchedKeywords: [],
+  },
+  {
+    asin: "AIZU-LACQUER-CARDCASE",
+    title: "会津塗 蒔絵カードケース 鶴ヶ城",
+    url: "https://aizu-brandkan.com/shopdetail/000000000198/",
+    imageUrl:
+      "https://aizu-brandkan.com/shopimages/hpgi/0000000000198.jpg",
+    price: "¥3,850",
+    amount: 3850,
+    currency: "JPY",
+    matchedKeywords: [],
+  },
+  {
+    asin: "AIZU-DRIED-PERSIMMON",
+    title: "会津みしらず柿 ドライフルーツ",
+    url: "https://aizu-brandkan.com/shopdetail/000000000412/",
+    imageUrl:
+      "https://aizu-brandkan.com/shopimages/hpgi/0000000000412.jpg",
+    price: "¥1,404",
+    amount: 1404,
+    currency: "JPY",
+    matchedKeywords: [],
+  },
+];
+
 const getFallbackProducts = (keywords: string[]): AmazonProduct[] => {
   if (keywords.length === 0) {
     return [];
@@ -422,8 +491,8 @@ export async function POST(req: NextRequest) {
 
   if (merged.length === 0) {
     return NextResponse.json({
-      products: getFallbackProducts(keywords),
-      error: "Amazon商品の取得に失敗したため、サンプル商品を表示しています。",
+      products: AIZU_BRAND_PRODUCTS,
+      error: "Amazon商品の取得に失敗したため、会津ブランド館の商品を表示しています。",
     });
   }
 
