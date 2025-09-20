@@ -60,6 +60,145 @@ interface SearchItemsPayload {
   SearchIndex: string;
 }
 
+type FallbackProduct = AmazonProduct & {
+  keywords: string[];
+};
+
+const FALLBACK_PRODUCTS: FallbackProduct[] = [
+  {
+    asin: "B0CNGY8WLC",
+    title: "Anker MagGo マグネット式ワイヤレス充電器",
+    url: "https://www.amazon.co.jp/dp/B0CNGY8WLC",
+    imageUrl:
+      "https://images-na.ssl-images-amazon.com/images/I/61Kp6y2QV9L._AC_SL1500_.jpg",
+    price: "¥5,990",
+    amount: 5990,
+    currency: "JPY",
+    rating: 4.4,
+    reviewCount: 1250,
+    matchedKeywords: ["ワイヤレス充電"],
+    keywords: ["ガジェット", "充電", "モバイル"],
+  },
+  {
+    asin: "B0C6HXQ8V6",
+    title: "Echo Pop (エコーポップ) スマートスピーカー with Alexa",
+    url: "https://www.amazon.co.jp/dp/B0C6HXQ8V6",
+    imageUrl:
+      "https://images-na.ssl-images-amazon.com/images/I/71KccXvH4BL._AC_SL1000_.jpg",
+    price: "¥5,980",
+    amount: 5980,
+    currency: "JPY",
+    rating: 4.3,
+    reviewCount: 3200,
+    matchedKeywords: ["スマート家電"],
+    keywords: ["スマートホーム", "IoT", "音声アシスタント"],
+  },
+  {
+    asin: "B0CQYX92TQ",
+    title: "Kindle (第11世代) Wi-Fi 16GB 広告つき",
+    url: "https://www.amazon.co.jp/dp/B0CQYX92TQ",
+    imageUrl:
+      "https://images-na.ssl-images-amazon.com/images/I/61N0%2BD0JxzL._AC_SL1500_.jpg",
+    price: "¥12,980",
+    amount: 12980,
+    currency: "JPY",
+    rating: 4.5,
+    reviewCount: 8600,
+    matchedKeywords: ["電子書籍"],
+    keywords: ["読書", "デジタルデバイス", "学習"],
+  },
+  {
+    asin: "B0BD2R8GLQ",
+    title: "ロジクール G502 X PLUS ゲーミングマウス",
+    url: "https://www.amazon.co.jp/dp/B0BD2R8GLQ",
+    imageUrl:
+      "https://images-na.ssl-images-amazon.com/images/I/61pY4v8Y4hL._AC_SL1500_.jpg",
+    price: "¥17,800",
+    amount: 17800,
+    currency: "JPY",
+    rating: 4.6,
+    reviewCount: 2100,
+    matchedKeywords: ["ゲーミング"],
+    keywords: ["PCアクセサリ", "ゲーム", "テクノロジー"],
+  },
+  {
+    asin: "B09PRZ4MZT",
+    title: "BALMUDA (バルミューダ) The Brew コーヒーメーカー",
+    url: "https://www.amazon.co.jp/dp/B09PRZ4MZT",
+    imageUrl:
+      "https://images-na.ssl-images-amazon.com/images/I/61BRqBpJ%2ByL._AC_SL1500_.jpg",
+    price: "¥64,900",
+    amount: 64900,
+    currency: "JPY",
+    rating: 4.1,
+    reviewCount: 340,
+    matchedKeywords: ["コーヒー"],
+    keywords: ["キッチン", "ライフスタイル", "家電"],
+  },
+  {
+    asin: "B0CNHF1LZP",
+    title: "Fire TV Stick 4K 第2世代",
+    url: "https://www.amazon.co.jp/dp/B0CNHF1LZP",
+    imageUrl:
+      "https://images-na.ssl-images-amazon.com/images/I/51QJgKVH6PL._AC_SL1000_.jpg",
+    price: "¥7,480",
+    amount: 7480,
+    currency: "JPY",
+    rating: 4.5,
+    reviewCount: 15000,
+    matchedKeywords: ["ストリーミング"],
+    keywords: ["エンタメ", "映像", "家電"],
+  },
+];
+
+const getFallbackProducts = (keywords: string[]): AmazonProduct[] => {
+  if (keywords.length === 0) {
+    return [];
+  }
+
+  const normalizedKeywords = keywords.map((keyword) => keyword.toLowerCase());
+
+  const matched = FALLBACK_PRODUCTS.filter((product) =>
+    product.keywords.some((productKeyword) =>
+      normalizedKeywords.some((keyword) =>
+        productKeyword.toLowerCase().includes(keyword) ||
+        keyword.includes(productKeyword.toLowerCase())
+      )
+    )
+  );
+
+  const source = matched.length > 0 ? matched : FALLBACK_PRODUCTS;
+
+  return source.slice(0, 6).map((product) => {
+    const matchedKeywords = new Set(product.matchedKeywords);
+
+    normalizedKeywords.forEach((keyword, index) => {
+      const originalKeyword = keywords[index];
+      if (
+        product.keywords.some((productKeyword) =>
+          productKeyword.toLowerCase().includes(keyword) ||
+          keyword.includes(productKeyword.toLowerCase())
+        )
+      ) {
+        matchedKeywords.add(originalKeyword);
+      }
+    });
+
+    return {
+      asin: product.asin,
+      title: product.title,
+      url: product.url,
+      imageUrl: product.imageUrl,
+      price: product.price,
+      amount: product.amount,
+      currency: product.currency,
+      rating: product.rating,
+      reviewCount: product.reviewCount,
+      matchedKeywords: Array.from(matchedKeywords),
+    };
+  });
+};
+
 const buildSigningKey = (secretKey: string, dateStamp: string, region: string) => {
   const kDate = crypto
     .createHmac("sha256", "AWS4" + secretKey)
@@ -178,30 +317,6 @@ const mergeProducts = (collections: AmazonProduct[][]): AmazonProduct[] => {
 };
 
 export async function POST(req: NextRequest) {
-  const {
-    AMAZON_ACCESS_KEY_ID,
-    AMAZON_SECRET_ACCESS_KEY,
-    AMAZON_PARTNER_TAG,
-    AMAZON_API_REGION,
-    AMAZON_API_HOST,
-    AMAZON_MARKETPLACE,
-  } = process.env;
-
-  const accessKeyId = AMAZON_ACCESS_KEY_ID;
-  const secretAccessKey = AMAZON_SECRET_ACCESS_KEY;
-  const partnerTag = AMAZON_PARTNER_TAG;
-
-  if (!accessKeyId || !secretAccessKey || !partnerTag) {
-    return NextResponse.json({
-      products: [],
-      error: "Amazon APIの資格情報が設定されていません。",
-    });
-  }
-
-  const host = AMAZON_API_HOST || DEFAULT_HOST;
-  const region = AMAZON_API_REGION || DEFAULT_REGION;
-  const marketplace = AMAZON_MARKETPLACE || DEFAULT_MARKETPLACE;
-
   let payload: { keywords?: string[] };
   try {
     payload = await req.json();
@@ -223,6 +338,30 @@ export async function POST(req: NextRequest) {
   if (keywords.length === 0) {
     return NextResponse.json({ products: [] });
   }
+
+  const {
+    AMAZON_ACCESS_KEY_ID,
+    AMAZON_SECRET_ACCESS_KEY,
+    AMAZON_PARTNER_TAG,
+    AMAZON_API_REGION,
+    AMAZON_API_HOST,
+    AMAZON_MARKETPLACE,
+  } = process.env;
+
+  const accessKeyId = AMAZON_ACCESS_KEY_ID;
+  const secretAccessKey = AMAZON_SECRET_ACCESS_KEY;
+  const partnerTag = AMAZON_PARTNER_TAG;
+
+  if (!accessKeyId || !secretAccessKey || !partnerTag) {
+    return NextResponse.json({
+      products: getFallbackProducts(keywords),
+      error: "Amazon APIの資格情報が設定されていません。サンプル商品を表示しています。",
+    });
+  }
+
+  const host = AMAZON_API_HOST || DEFAULT_HOST;
+  const region = AMAZON_API_REGION || DEFAULT_REGION;
+  const marketplace = AMAZON_MARKETPLACE || DEFAULT_MARKETPLACE;
 
   const baseBody: Omit<SearchItemsPayload, "Keywords"> = {
     ItemCount: 6,
@@ -280,6 +419,13 @@ export async function POST(req: NextRequest) {
   }
 
   const merged = mergeProducts(results).slice(0, 12);
+
+  if (merged.length === 0) {
+    return NextResponse.json({
+      products: getFallbackProducts(keywords),
+      error: "Amazon商品の取得に失敗したため、サンプル商品を表示しています。",
+    });
+  }
 
   return NextResponse.json({ products: merged });
 }
