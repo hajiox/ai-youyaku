@@ -334,7 +334,7 @@ const signRequest = (
       "content-type": contentType,
       "x-amz-date": amzDate,
       "x-amz-target": TARGET,
-      host: host,
+      "x-amz-content-sha256": payloadHash,
       "User-Agent": "AIKijiYoyaku/1.0",
       Authorization: authorization,
     },
