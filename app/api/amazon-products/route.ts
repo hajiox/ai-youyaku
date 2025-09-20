@@ -1,3 +1,5 @@
+export const runtime = "nodejs";
+
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -332,6 +334,8 @@ const signRequest = (
       "content-type": contentType,
       "x-amz-date": amzDate,
       "x-amz-target": TARGET,
+      host,
+      "User-Agent": "AIKijiYoyaku/1.0",
       Authorization: authorization,
     },
     path: canonicalUri,
