@@ -4,6 +4,9 @@
 
 import { useState, useEffect } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
+import AmazonProductShowcase, {
+  AmazonProduct as AmazonProductType,
+} from "./components/AmazonProductShowcase";
 import ToneSampleModal from "./components/ToneSampleModal"; // ★ インポートパスを相対パスに変更
 
 // APIから返ってくる口調サンプルの型 (将来的にGETで使う場合)
@@ -36,6 +39,11 @@ export default function Home() {
   const [toneSampleError, setToneSampleError] = useState<string | null>(null);
   const [toneSampleSuccessMessage, setToneSampleSuccessMessage] = useState<string | null>(null);
   const [amazonKeywords, setAmazonKeywords] = useState<string[]>([]);
+  const [amazonProducts, setAmazonProducts] = useState<AmazonProductType[]>([]);
+  const [amazonProductsLoading, setAmazonProductsLoading] = useState(false);
+  const [amazonProductsError, setAmazonProductsError] = useState<string | null>(
+    null
+  );
 
   const extractKeywords = (text: string, max: number = 3): string[] => {
     const tokens = text.match(/[\p{Script=Han}々]+|[ァ-ヶー]+|[a-zA-Z]+/gu) || [];
@@ -160,6 +168,10 @@ export default function Home() {
     setError(null);
     setIsLoading(false);
     setProcessedInfo(null);
+    setAmazonKeywords([]);
+    setAmazonProducts([]);
+    setAmazonProductsError(null);
+    setAmazonProductsLoading(false);
   };
 
   useEffect(() => {
@@ -199,6 +211,69 @@ export default function Home() {
     }
   }, [shortSummary, longSummary]);
 
+  useEffect(() => {
+    if (amazonKeywords.length === 0) {
+      setAmazonProducts([]);
+      setAmazonProductsError(null);
+      setAmazonProductsLoading(false);
+      return;
+    }
+
+    let isCancelled = false;
+    const controller = new AbortController();
+
+    const fetchProducts = async () => {
+      setAmazonProductsLoading(true);
+      setAmazonProductsError(null);
+      try {
+        const response = await fetch("/api/amazon-products", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ keywords: amazonKeywords }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error("Amazon商品の取得に失敗しました。");
+        }
+
+        const data: { products?: AmazonProductType[]; error?: string } =
+          await response.json();
+
+        if (!isCancelled) {
+          setAmazonProducts(data.products || []);
+          if (data.error) {
+            setAmazonProductsError(data.error);
+          }
+        }
+      } catch (err: any) {
+        if (err?.name === "AbortError") {
+          return;
+        }
+        if (!isCancelled) {
+          console.error("Failed to fetch Amazon products", err);
+          setAmazonProducts([]);
+          setAmazonProductsError(
+            err?.message || "Amazon商品の取得に失敗しました。"
+          );
+        }
+      } finally {
+        if (!isCancelled) {
+          setAmazonProductsLoading(false);
+        }
+      }
+    };
+
+    fetchProducts();
+
+    return () => {
+      isCancelled = true;
+      controller.abort();
+    };
+  }, [amazonKeywords]);
+
 
   const handleSaveToneSample = async (sampleToSave: string) => {
     setIsSavingToneSample(true);
@@ -237,8 +312,9 @@ export default function Home() {
 
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-slate-50 text-slate-700 font-sans">
-      <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-lg">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-8 bg-slate-50 p-4 text-slate-700 font-sans">
+      <div className="grid w-full max-w-6xl gap-6 lg:grid-cols-[1.05fr_minmax(260px,0.95fr)]">
+        <div className="w-full rounded-lg bg-white p-6 shadow-md">
         <h1 className="text-3xl font-semibold mb-2 text-center text-blue-600">
           AI記事要約.com
         </h1>
@@ -383,26 +459,16 @@ export default function Home() {
           </div>
         )}
 
-        {amazonKeywords.length > 0 && (
-          <div className="mt-4 p-4 border border-slate-200 rounded-md bg-white">
-            <ul className="list-disc list-inside text-sm text-blue-600 space-y-1">
-              {amazonKeywords.map((kw, idx) => (
-                <li key={idx}>
-                  <a
-                    href={`https://www.amazon.co.jp/s?k=${encodeURIComponent(kw)}&tag=aizubrandhall-22`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Amazonで「{kw}」の商品を探す
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        </div>
+        <AmazonProductShowcase
+          keywords={amazonKeywords}
+          products={amazonProducts}
+          isLoading={amazonProductsLoading}
+          error={amazonProductsError}
+        />
       </div>
 
-      <footer className="text-center mt-8 text-xs text-slate-400">
+      <footer className="mt-4 text-center text-xs text-slate-400">
         <p className="mb-1">
           <button
             onClick={() => setShowContactModal(true)}

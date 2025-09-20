@@ -23,6 +23,16 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 
 # OpenAI
 OPENAI_API_KEY=your-openai-api-key
+
+# Amazon Product Advertising API
+AMAZON_ACCESS_KEY_ID=your-amazon-access-key
+AMAZON_SECRET_ACCESS_KEY=your-amazon-secret-key
+AMAZON_PARTNER_TAG=your-partner-tag-22
+# Optional overrides (defaults target Amazon.co.jp)
+# AMAZON_API_REGION=us-west-2
+# AMAZON_API_HOST=webservices.amazon.co.jp
+# AMAZON_MARKETPLACE=www.amazon.co.jp
 ```
 
-These variables are required for Google login and API requests to work correctly. After setting them, restart the development server.
+These variables are required for Google login and API requests to work correctly. The Amazon settings enable the product showcase that appears next to the summaries.
+After setting them, restart the development server.
