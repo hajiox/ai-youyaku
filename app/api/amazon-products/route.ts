@@ -443,7 +443,13 @@ export async function POST(req: NextRequest) {
     PartnerTag: partnerTag,
     PartnerType: "Associates",
     Marketplace: marketplace,
-    Resources: ["ItemInfo.Title"],
+    Resources: [
+      "Images.Primary.Medium",
+      "ItemInfo.Title",
+      "Offers.Listings.Price",
+      "CustomerReviews.Count",
+      "CustomerReviews.StarRating",
+    ],
     SearchIndex: "All",
   };
 
