@@ -280,6 +280,9 @@ const buildSigningKey = (secretKey: string, dateStamp: string, region: string) =
   return crypto.createHmac("sha256", kService).update("aws4_request").digest();
 };
 
+const normalizeHost = (host: string) =>
+  host.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+
 const signRequest = (
   body: string,
   accessKeyId: string,
@@ -334,6 +337,7 @@ const signRequest = (
   return {
     headers: {
       "content-type": contentType,
+      Accept: "application/json",
       "x-amz-date": amzDate,
       "x-amz-target": TARGET,
       "x-amz-content-sha256": payloadHash,
@@ -434,7 +438,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const host = AMAZON_API_HOST || DEFAULT_HOST;
+  const host = normalizeHost(AMAZON_API_HOST || DEFAULT_HOST);
   const region = AMAZON_API_REGION || DEFAULT_REGION;
   const marketplace = AMAZON_MARKETPLACE || DEFAULT_MARKETPLACE;
 
@@ -454,6 +458,8 @@ export async function POST(req: NextRequest) {
   };
 
   const results: AmazonProduct[][] = [];
+  const fallbackCollections: AmazonProduct[][] = [];
+  const encounteredErrors: string[] = [];
   for (const keyword of keywords) {
     const body: SearchItemsPayload = {
       ...baseBody,
@@ -480,15 +486,12 @@ export async function POST(req: NextRequest) {
       if (!response.ok) {
         const errorBody = await response.text();
         console.error("Amazon API error", response.status, errorBody);
-
-        return NextResponse.json(
-          {
-            products: [],
-            error: `Amazon API error ${response.status}`,
-            details: errorBody,
-          },
-          { status: 200 }
-        );
+        encounteredErrors.push(`Amazon API error ${response.status}`);
+        const fallback = getFallbackProducts([keyword]);
+        if (fallback.length > 0) {
+          fallbackCollections.push(fallback);
+        }
+        continue;
       }
 
       const data = await response.json();
@@ -498,10 +501,15 @@ export async function POST(req: NextRequest) {
       results.push(extractProducts(items, keyword));
     } catch (error) {
       console.error("Amazon API request failed", error);
+      encounteredErrors.push("Amazon API request failed");
+      const fallback = getFallbackProducts([keyword]);
+      if (fallback.length > 0) {
+        fallbackCollections.push(fallback);
+      }
     }
   }
 
-  const merged = mergeProducts(results).slice(0, 12);
+  const merged = mergeProducts([...results, ...fallbackCollections]).slice(0, 12);
 
   if (merged.length === 0) {
     return NextResponse.json({
@@ -510,5 +518,14 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  return NextResponse.json({ products: merged });
+  return NextResponse.json({
+    products: merged,
+    ...(encounteredErrors.length
+      ? {
+          error:
+            encounteredErrors[encounteredErrors.length - 1] ||
+            "Amazon商品の取得中にエラーが発生しました。",
+        }
+      : {}),
+  });
 }
