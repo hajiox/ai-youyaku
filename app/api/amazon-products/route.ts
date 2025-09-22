@@ -1,7 +1,7 @@
 export const runtime = "nodejs";
 
+import { Configuration, DefaultApi } from "paapi5-nodejs-sdk";
 import { NextRequest, NextResponse } from "next/server";
-import aws4 from "aws4";
 
 type Product = {
   asin: string;
@@ -16,25 +16,45 @@ type Product = {
   matchedKeywords: string[];
 };
 
-const SERVICE = "ProductAdvertisingAPI";
-const REGION = "us-west-2"; // JPはこれで固定
-const HOST = "webservices.amazon.co.jp";
-const PATH = "/paapi5/searchitems";
-const TARGET = "com.amazon.paapi5.v1.ProductAdvertisingAPIv1.SearchItems";
+const DEFAULT_MARKETPLACE = "www.amazon.co.jp";
 
-export async function POST(req: NextRequest) {
-  // envはtrimしてから使用（改行/空白混入対策）
+const Resources = [
+  "Images.Primary.Medium",
+  "ItemInfo.Title",
+  "Offers.Listings.Price",
+  "CustomerReviews.Count",
+  "CustomerReviews.StarRating",
+];
+
+const apiCache = new Map<string, DefaultApi>();
+
+function getApiClient(marketplace: string) {
+  const cached = apiCache.get(marketplace);
+  if (cached) return cached;
+
   const id = (process.env.AMAZON_ACCESS_KEY_ID || "").trim();
   const secret = (process.env.AMAZON_SECRET_ACCESS_KEY || "").trim();
   const tag = (process.env.AMAZON_PARTNER_TAG || "").trim();
-  const marketplace = (process.env.AMAZON_MARKETPLACE || "www.amazon.co.jp").trim();
 
   if (!id || !secret || !tag) {
-    return NextResponse.json(
-      { products: [], error: "Amazon APIの資格情報が不足しています。" },
-      { status: 400 }
-    );
+    throw new Error("Amazon APIの資格情報が不足しています。");
   }
+
+  const configuration = new Configuration({
+    accessKey: id,
+    secretKey: secret,
+    partnerTag: tag,
+    partnerType: "Associates",
+    marketplace,
+  });
+
+  const api = new DefaultApi(configuration);
+  apiCache.set(marketplace, api);
+  return api;
+}
+
+export async function POST(req: NextRequest) {
+  const marketplace = (process.env.AMAZON_MARKETPLACE || DEFAULT_MARKETPLACE).trim();
 
   let payload: { keywords?: string[] } = {};
   try {
@@ -49,62 +69,34 @@ export async function POST(req: NextRequest) {
 
   if (!keywords.length) return NextResponse.json({ products: [] });
 
-  const Resources = [
-    "Images.Primary.Medium",
-    "ItemInfo.Title",
-    "Offers.Listings.Price",
-    "CustomerReviews.Count",
-    "CustomerReviews.StarRating",
-  ];
-
   const all: Product[] = [];
 
-  for (const kw of keywords) {
-    const bodyObj = {
-      PartnerTag: tag,
-      PartnerType: "Associates",
-      Marketplace: marketplace,
-      Keywords: kw,
-      ItemCount: 6,
-      SearchIndex: "All",
-      Resources,
-    };
-    const body = JSON.stringify(bodyObj);
-
-    // 署名済みリクエストを作成
-    const reqOpts: aws4.Request = {
-      host: HOST,
-      method: "POST",
-      path: PATH,
-      service: SERVICE,
-      region: REGION,
-      headers: {
-        "content-type": "application/json; charset=UTF-8",
-        "x-amz-target": TARGET,
+  let api: DefaultApi;
+  try {
+    api = getApiClient(marketplace);
+  } catch (error: any) {
+    return NextResponse.json(
+      {
+        products: [],
+        error: error?.message || "Amazon APIの資格情報が不足しています。",
       },
-      body,
-    };
-    aws4.sign(reqOpts, { accessKeyId: id, secretAccessKey: secret });
+      { status: 400 }
+    );
+  }
 
+  for (const kw of keywords) {
     try {
-      const res = await fetch(`https://${HOST}${PATH}`, {
-        method: "POST",
-        headers: reqOpts.headers as Record<string, string>,
-        body,
-        cache: "no-store",
+      const response = await api.searchItems({
+        Keywords: kw,
+        ItemCount: 6,
+        SearchIndex: "All",
+        Resources,
       });
 
-      if (!res.ok) {
-        const text = await res.text();
-        console.error("Amazon API error:", res.status, text);
-        return NextResponse.json(
-          { products: [], error: `Amazon API error ${res.status}`, details: text },
-          { status: 502 }
-        );
-      }
-
-      const data = await res.json();
-      const items: any[] = data?.SearchResult?.Items ?? [];
+      const items: any[] =
+        (response as any)?.SearchResult?.Items ??
+        (response as any)?.ItemsResult?.Items ??
+        [];
       for (const it of items) {
         if (!it?.ASIN || !it?.DetailPageURL) continue;
         const listing = it?.Offers?.Listings?.[0];
@@ -122,10 +114,19 @@ export async function POST(req: NextRequest) {
         });
       }
     } catch (e: any) {
-      console.error("Amazon API request failed:", e?.message || String(e));
+      const status = e?.statusCode || e?.status || 502;
+      const message = e?.message || String(e);
+      const details =
+        e?.body?.Errors?.[0]?.Message || e?.body?.message || e?.response?.body || undefined;
+
+      console.error("Amazon API request failed:", message, details);
       return NextResponse.json(
-        { products: [], error: "Amazon API request failed", details: e?.message || String(e) },
-        { status: 502 }
+        {
+          products: [],
+          error: "Amazon API request failed",
+          details: details ?? message,
+        },
+        { status }
       );
     }
   }
