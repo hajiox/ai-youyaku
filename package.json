@@ -45,7 +45,6 @@
     "@radix-ui/react-tooltip": "1.1.6",
     "@supabase/supabase-js": "^2.44.1",
     "autoprefixer": "^10.4.20",
-    "aws4": "^1.12.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
@@ -66,7 +65,8 @@
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.6",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "paapi5-nodejs-sdk": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^22",
