@@ -95,12 +95,12 @@ dependencies:
   '@supabase/supabase-js':
     specifier: ^2.44.1
     version: 2.49.7
-  aws4:
-    specifier: ^1.12.0
-    version: 1.12.0
   autoprefixer:
     specifier: ^10.4.20
     version: 10.4.21(postcss@8.5.3)
+  aws4:
+    specifier: ^1.13.2
+    version: 1.13.2
   class-variance-authority:
     specifier: ^0.7.1
     version: 0.7.1
@@ -186,13 +186,6 @@ devDependencies:
     version: 5.8.3
 
 packages:
-
-  aws4@1.12.0:
-    resolution:
-      integrity: ''
-    engines:
-      node: '>=0.12.0'
-    dev: false
 
   /@alloc/quick-lru@5.2.0:
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
@@ -2186,6 +2179,10 @@ packages:
       picocolors: 1.1.1
       postcss: 8.5.3
       postcss-value-parser: 4.2.0
+    dev: false
+
+  /aws4@1.13.2:
+    resolution: {integrity: sha512-lHe62zvbTB5eEABUVi/AwVh0ZKY9rMMDhmm+eeyuuUQbQ3+J+fONVQOZyj+DdrvD4BY33uYniyRJ4UJIaSKAfw==}
     dev: false
 
   /balanced-match@1.0.2:
