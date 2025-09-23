@@ -1,8 +1,14 @@
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import aws4 from "aws4";
 import crypto from "crypto";
+
+const HOST = "webservices.amazon.co.jp";
+const REGION = "us-west-2";
+const SERVICE = "ProductAdvertisingAPI";
+const TARGET = "com.amazon.paapi5.v1.ProductAdvertisingAPIv1.SearchItems";
+const PATH = "/paapi5/searchitems";
+const MARKETPLACE = process.env.AMAZON_MARKETPLACE?.trim() || "www.amazon.co.jp";
 
 type Product = {
   asin: string;
@@ -17,28 +23,29 @@ type Product = {
   matchedKeywords: string[];
 };
 
-const HOST = "webservices.amazon.co.jp";
-const PATH = "/paapi5/searchitems";
-const SERVICE = "ProductAdvertisingAPI";
-const REGION = "us-west-2"; // JPはこれで固定
-const TARGET = "com.amazon.paapi5.v1.ProductAdvertisingAPIv1.SearchItems";
-const DEFAULT_MARKETPLACE = "www.amazon.co.jp";
-const RESOURCES = [
-  "Images.Primary.Medium",
-  "ItemInfo.Title",
-  "Offers.Listings.Price",
-  "CustomerReviews.Count",
-  "CustomerReviews.StarRating",
-];
+function hmac(key: Buffer | string, data: string) {
+  return crypto.createHmac("sha256", key).update(data).digest();
+}
+function sha256Hex(data: string) {
+  return crypto.createHash("sha256").update(data).digest("hex");
+}
+function amzDates() {
+  const iso = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
+  return { amzDate: iso, dateStamp: iso.slice(0, 8) };
+}
+function signingKey(secretKey: string, dateStamp: string) {
+  const kDate = hmac("AWS4" + secretKey, dateStamp);
+  const kRegion = hmac(kDate, REGION);
+  const kServ = hmac(kRegion, SERVICE);
+  return hmac(kServ, "aws4_request");
+}
 
 export async function POST(req: NextRequest) {
-  // envはtrimしてから使用（改行/空白混入対策）
-  const id = (process.env.AMAZON_ACCESS_KEY_ID || "").trim();
-  const secret = (process.env.AMAZON_SECRET_ACCESS_KEY || "").trim();
-  const tag = (process.env.AMAZON_PARTNER_TAG || "").trim();
-  const marketplace = (process.env.AMAZON_MARKETPLACE || DEFAULT_MARKETPLACE).trim();
+  const accessKeyId = process.env.AMAZON_ACCESS_KEY_ID?.trim();
+  const secretKey = process.env.AMAZON_SECRET_ACCESS_KEY?.trim();
+  const partnerTag = process.env.AMAZON_PARTNER_TAG?.trim();
 
-  if (!id || !secret || !tag) {
+  if (!accessKeyId || !secretKey || !partnerTag) {
     return NextResponse.json(
       { products: [], error: "Amazon APIの資格情報が不足しています。" },
       { status: 400 }
@@ -49,7 +56,6 @@ export async function POST(req: NextRequest) {
   try {
     payload = await req.json();
   } catch {}
-
   const keywords = (payload.keywords ?? [])
     .filter((k): k is string => typeof k === "string")
     .map((k) => k.trim())
@@ -61,45 +67,71 @@ export async function POST(req: NextRequest) {
   const all: Product[] = [];
 
   for (const kw of keywords) {
+    const { amzDate, dateStamp } = amzDates();
     const bodyObj = {
-      PartnerTag: tag,
-      PartnerType: "Associates",
-      Marketplace: marketplace,
       Keywords: kw,
-      ItemCount: 6,
-      SearchIndex: "All",
-      Resources: RESOURCES,
+      PartnerTag: partnerTag,
+      PartnerType: "Associates",
+      Marketplace: MARKETPLACE,
+      Operation: "SearchItems",
     };
     const body = JSON.stringify(bodyObj);
-    const payloadHash = crypto.createHash("sha256").update(body).digest("hex");
+    const payloadHash = sha256Hex(body);
 
-    // 署名済みリクエストを作成
-    const reqOpts: aws4.Request = {
-      host: HOST,
-      method: "POST",
-      path: PATH,
-      service: SERVICE,
-      region: REGION,
-      headers: {
-        "content-type": "application/json; charset=UTF-8",
-        "x-amz-target": TARGET,
-        "x-amz-content-sha256": payloadHash,
-        "user-agent": "AIKijiYoyaku/1.0 (+support@aizubrandhall.jp)",
-      },
-      body,
+    const contentType = "application/json; charset=UTF-8";
+    const canonicalHeaders =
+      `content-type:${contentType}\n` +
+      `host:${HOST}\n` +
+      `x-amz-content-sha256:${payloadHash}\n` +
+      `x-amz-date:${amzDate}\n` +
+      `x-amz-target:${TARGET}\n`;
+    const signedHeaders =
+      "content-type;host;x-amz-content-sha256;x-amz-date;x-amz-target";
+
+    const canonicalRequest = [
+      "POST",
+      PATH,
+      "",
+      canonicalHeaders,
+      signedHeaders,
+      payloadHash,
+    ].join("\n");
+
+    const credentialScope = `${dateStamp}/${REGION}/${SERVICE}/aws4_request`;
+    const stringToSign = [
+      "AWS4-HMAC-SHA256",
+      amzDate,
+      credentialScope,
+      sha256Hex(canonicalRequest),
+    ].join("\n");
+
+    const signature = crypto
+      .createHmac("sha256", signingKey(secretKey, dateStamp))
+      .update(stringToSign)
+      .digest("hex");
+
+    const authorization =
+      `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, ` +
+      `SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    const headers: Record<string, string> = {
+      "content-type": contentType,
+      "x-amz-date": amzDate,
+      "x-amz-target": TARGET,
+      "x-amz-content-sha256": payloadHash,
+      Authorization: authorization,
     };
-    aws4.sign(reqOpts, { accessKeyId: id, secretAccessKey: secret });
 
     try {
       const res = await fetch(`https://${HOST}${PATH}`, {
         method: "POST",
-        headers: reqOpts.headers as Record<string, string>,
+        headers,
         body,
         cache: "no-store",
       });
 
+      const text = await res.text();
       if (!res.ok) {
-        const text = await res.text();
         console.error("Amazon API error:", res.status, text);
         return NextResponse.json(
           { products: [], error: `Amazon API error ${res.status}`, details: text },
@@ -107,11 +139,20 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const data = await res.json();
-      const items: any[] = data?.SearchResult?.Items ?? data?.ItemsResult?.Items ?? [];
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {}
+
+      const items: any[] =
+        data?.SearchResult?.Items ??
+        data?.ItemsResult?.Items ??
+        [];
+
       for (const it of items) {
         if (!it?.ASIN || !it?.DetailPageURL) continue;
         const listing = it?.Offers?.Listings?.[0];
+
         all.push({
           asin: it.ASIN,
           title: it?.ItemInfo?.Title?.DisplayValue ?? "",
@@ -126,7 +167,7 @@ export async function POST(req: NextRequest) {
         });
       }
     } catch (e: any) {
-      console.error("Amazon API request failed:", e?.message || String(e));
+      console.error("PA-API request failed:", e?.message || String(e));
       return NextResponse.json(
         { products: [], error: "Amazon API request failed", details: e?.message || String(e) },
         { status: 502 }
@@ -134,7 +175,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ASINで重複マージ
   const map = new Map<string, Product>();
   for (const p of all) {
     const ex = map.get(p.asin);
