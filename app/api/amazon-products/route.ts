@@ -74,6 +74,15 @@ export async function POST(req: NextRequest) {
       PartnerType: "Associates",
       Marketplace: MARKETPLACE,
       Operation: "SearchItems",
+      SearchIndex: "All",
+      ItemCount: 6,
+      Resources: [
+        "Images.Primary.Medium",
+        "ItemInfo.Title",
+        "Offers.Listings.Price",
+        "CustomerReviews.Count",
+        "CustomerReviews.StarRating",
+      ],
     };
     const body = JSON.stringify(bodyObj);
     const payloadHash = sha256Hex(body);
