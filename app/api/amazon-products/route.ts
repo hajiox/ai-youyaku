@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import aws4 from "aws4";
+import crypto from "crypto";
 
 type Product = {
   asin: string;
@@ -16,18 +17,26 @@ type Product = {
   matchedKeywords: string[];
 };
 
-const SERVICE = "ProductAdvertisingAPI";
-const REGION = "us-west-2"; // JPはこれで固定
 const HOST = "webservices.amazon.co.jp";
 const PATH = "/paapi5/searchitems";
+const SERVICE = "ProductAdvertisingAPI";
+const REGION = "us-west-2"; // JPはこれで固定
 const TARGET = "com.amazon.paapi5.v1.ProductAdvertisingAPIv1.SearchItems";
+const DEFAULT_MARKETPLACE = "www.amazon.co.jp";
+const RESOURCES = [
+  "Images.Primary.Medium",
+  "ItemInfo.Title",
+  "Offers.Listings.Price",
+  "CustomerReviews.Count",
+  "CustomerReviews.StarRating",
+];
 
 export async function POST(req: NextRequest) {
   // envはtrimしてから使用（改行/空白混入対策）
   const id = (process.env.AMAZON_ACCESS_KEY_ID || "").trim();
   const secret = (process.env.AMAZON_SECRET_ACCESS_KEY || "").trim();
   const tag = (process.env.AMAZON_PARTNER_TAG || "").trim();
-  const marketplace = (process.env.AMAZON_MARKETPLACE || "www.amazon.co.jp").trim();
+  const marketplace = (process.env.AMAZON_MARKETPLACE || DEFAULT_MARKETPLACE).trim();
 
   if (!id || !secret || !tag) {
     return NextResponse.json(
@@ -49,14 +58,6 @@ export async function POST(req: NextRequest) {
 
   if (!keywords.length) return NextResponse.json({ products: [] });
 
-  const Resources = [
-    "Images.Primary.Medium",
-    "ItemInfo.Title",
-    "Offers.Listings.Price",
-    "CustomerReviews.Count",
-    "CustomerReviews.StarRating",
-  ];
-
   const all: Product[] = [];
 
   for (const kw of keywords) {
@@ -67,9 +68,10 @@ export async function POST(req: NextRequest) {
       Keywords: kw,
       ItemCount: 6,
       SearchIndex: "All",
-      Resources,
+      Resources: RESOURCES,
     };
     const body = JSON.stringify(bodyObj);
+    const payloadHash = crypto.createHash("sha256").update(body).digest("hex");
 
     // 署名済みリクエストを作成
     const reqOpts: aws4.Request = {
@@ -81,6 +83,8 @@ export async function POST(req: NextRequest) {
       headers: {
         "content-type": "application/json; charset=UTF-8",
         "x-amz-target": TARGET,
+        "x-amz-content-sha256": payloadHash,
+        "user-agent": "AIKijiYoyaku/1.0 (+support@aizubrandhall.jp)",
       },
       body,
     };
@@ -104,7 +108,7 @@ export async function POST(req: NextRequest) {
       }
 
       const data = await res.json();
-      const items: any[] = data?.SearchResult?.Items ?? [];
+      const items: any[] = data?.SearchResult?.Items ?? data?.ItemsResult?.Items ?? [];
       for (const it of items) {
         if (!it?.ASIN || !it?.DetailPageURL) continue;
         const listing = it?.Offers?.Listings?.[0];
