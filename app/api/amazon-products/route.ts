@@ -1,14 +1,13 @@
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import aws4 from "aws4";
+import crypto from "crypto";
 
 const HOST = "webservices.amazon.co.jp";
 const REGION = "us-west-2";
 const SERVICE = "ProductAdvertisingAPI";
 const TARGET = "com.amazon.paapi5.v1.ProductAdvertisingAPIv1.SearchItems";
-const PATH = "/paapi5/searchitems";
-const MARKETPLACE = process.env.AMAZON_MARKETPLACE?.trim() || "www.amazon.co.jp";
+const PATH = "/";
 const RESOURCES = [
   "Images.Primary.Medium",
   "ItemInfo.Title",
@@ -16,6 +15,26 @@ const RESOURCES = [
   "CustomerReviews.Count",
   "CustomerReviews.StarRating",
 ];
+
+function hmac(key: crypto.BinaryLike | crypto.KeyObject, data: string) {
+  return crypto.createHmac("sha256", key).update(data).digest();
+}
+
+function sha256Hex(data: string) {
+  return crypto.createHash("sha256").update(data).digest("hex");
+}
+
+function amzDates() {
+  const iso = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
+  return { amzDate: iso, dateStamp: iso.slice(0, 8) };
+}
+
+function signingKey(secretKey: string, dateStamp: string) {
+  const kDate = hmac("AWS4" + secretKey, dateStamp);
+  const kRegion = hmac(kDate, REGION);
+  const kService = hmac(kRegion, SERVICE);
+  return hmac(kService, "aws4_request");
+}
 
 type Product = {
   asin: string;
@@ -57,47 +76,66 @@ export async function POST(req: NextRequest) {
   const all: Product[] = [];
 
   for (const kw of keywords) {
-    const body = JSON.stringify({
+    const { amzDate, dateStamp } = amzDates();
+
+    const bodyObj = {
       Keywords: kw,
-      Marketplace: MARKETPLACE,
       PartnerTag: partnerTag,
       PartnerType: "Associates",
       SearchIndex: "All",
       ItemCount: 6,
       Resources: RESOURCES,
-    });
+    } as const;
 
-    const request = {
-      host: HOST,
-      method: "POST",
-      path: PATH,
-      service: SERVICE,
-      region: REGION,
-      body,
-      headers: {
-        "Content-Type": "application/json; charset=UTF-8",
-        "X-Amz-Target": TARGET,
-        Accept: "application/json, text/javascript",
-        "User-Agent":
-          "Mozilla/5.0 (compatible; ai-youyaku/1.0; +support@aizubrandhall.jp)",
-      } as Record<string, string>,
+    const body = JSON.stringify(bodyObj);
+    const contentType = "application/json; charset=utf-8";
+    const contentEncoding = "amz-1.0";
+
+    const canonicalHeaders =
+      `content-type:${contentType}\n` +
+      `host:${HOST}\n` +
+      `x-amz-date:${amzDate}\n` +
+      `x-amz-target:${TARGET}\n`;
+    const signedHeaders = "content-type;host;x-amz-date;x-amz-target";
+
+    const canonicalRequest = [
+      "POST",
+      PATH,
+      "",
+      canonicalHeaders,
+      signedHeaders,
+      sha256Hex(body),
+    ].join("\n");
+
+    const credentialScope = `${dateStamp}/${REGION}/${SERVICE}/aws4_request`;
+    const stringToSign = [
+      "AWS4-HMAC-SHA256",
+      amzDate,
+      credentialScope,
+      sha256Hex(canonicalRequest),
+    ].join("\n");
+
+    const signature = crypto
+      .createHmac("sha256", signingKey(secretKey, dateStamp))
+      .update(stringToSign)
+      .digest("hex");
+
+    const authorization =
+      `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, ` +
+      `SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    const headers: Record<string, string> = {
+      "content-type": contentType,
+      "content-encoding": contentEncoding,
+      "x-amz-date": amzDate,
+      "x-amz-target": TARGET,
+      Authorization: authorization,
     };
-
-    const signed = aws4.sign(request, {
-      accessKeyId,
-      secretAccessKey: secretKey,
-    });
-
-    const signedHeaders = signed.headers ?? {};
-    if ("Host" in signedHeaders) {
-      delete (signedHeaders as Record<string, string>).Host;
-    }
-    signedHeaders.host = HOST;
 
     try {
       const res = await fetch(`https://${HOST}${PATH}`, {
         method: "POST",
-        headers: signedHeaders as Record<string, string>,
+        headers,
         body,
         cache: "no-store",
       });
