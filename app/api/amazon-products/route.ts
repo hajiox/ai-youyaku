@@ -1,13 +1,17 @@
+// /app/api/amazon-products/route.ts ver.1
+
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 
+// 変更箇所①: ホストとパスを日本向けエンドポイントに統一
 const HOST = "webservices.amazon.co.jp";
-const REGION = "us-west-2";
+const REGION = "ap-northeast-1"; // 日本向けリージョン
 const SERVICE = "ProductAdvertisingAPI";
 const TARGET = "com.amazon.paapi5.v1.ProductAdvertisingAPIv1.SearchItems";
-const PATH = "/";
+const PATH = "/paapi5/searchitems"; // 正しいパス
+
 const RESOURCES = [
   "Images.Primary.Medium",
   "ItemInfo.Title",
