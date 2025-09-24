@@ -1,16 +1,15 @@
-// /app/api/amazon-products/route.ts ver.1
+// /app/api/amazon-products/route.ts ver.2
 
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 
-// 変更箇所①: ホストとパスを日本向けエンドポイントに統一
 const HOST = "webservices.amazon.co.jp";
-const REGION = "ap-northeast-1"; // 日本向けリージョン
+const REGION = "ap-northeast-1";
 const SERVICE = "ProductAdvertisingAPI";
 const TARGET = "com.amazon.paapi5.v1.ProductAdvertisingAPIv1.SearchItems";
-const PATH = "/paapi5/searchitems"; // 正しいパス
+const PATH = "/paapi5/searchitems";
 
 const RESOURCES = [
   "Images.Primary.Medium",
@@ -130,6 +129,13 @@ export async function POST(req: NextRequest) {
     const authorization =
       `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, ` +
       `SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    // デバッグログを追加
+    console.log("--- Amazon PA-API Request Debug ---");
+    console.log("CanonicalRequest:", canonicalRequest);
+    console.log("StringToSign:", stringToSign);
+    console.log("Authorization Header:", authorization);
+    console.log("--- End Debug ---");
 
     const headers: Record<string, string> = {
       "content-type": contentType,
