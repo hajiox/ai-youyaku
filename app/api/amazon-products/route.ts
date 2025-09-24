@@ -1,4 +1,4 @@
-// /app/api/amazon-products/route.ts ver.2
+// /app/api/amazon-products/route.ts ver.3
 
 export const runtime = "nodejs";
 
@@ -19,7 +19,8 @@ const RESOURCES = [
   "CustomerReviews.StarRating",
 ];
 
-function hmac(key: crypto.BinaryLike | crypto.KeyObject, data: string) {
+// hmac 関数のキーの型を修正
+function hmac(key: crypto.BinaryLike, data: string): Buffer {
   return crypto.createHmac("sha256", key).update(data).digest();
 }
 
@@ -32,8 +33,10 @@ function amzDates() {
   return { amzDate: iso, dateStamp: iso.slice(0, 8) };
 }
 
+// 修正箇所： signingKey 関数
 function signingKey(secretKey: string, dateStamp: string) {
-  const kDate = hmac("AWS4" + secretKey, dateStamp);
+  // keyの前に`AWS4`を付加し、Bufferとして渡す
+  const kDate = hmac(Buffer.from("AWS4" + secretKey, "utf8"), dateStamp);
   const kRegion = hmac(kDate, REGION);
   const kService = hmac(kRegion, SERVICE);
   return hmac(kService, "aws4_request");
@@ -130,12 +133,12 @@ export async function POST(req: NextRequest) {
       `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, ` +
       `SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
-    // デバッグログを追加
-    console.log("--- Amazon PA-API Request Debug ---");
-    console.log("CanonicalRequest:", canonicalRequest);
-    console.log("StringToSign:", stringToSign);
-    console.log("Authorization Header:", authorization);
-    console.log("--- End Debug ---");
+    // デバッグログを削除
+    // console.log("--- Amazon PA-API Request Debug ---");
+    // console.log("CanonicalRequest:", canonicalRequest);
+    // console.log("StringToSign:", stringToSign);
+    // console.log("Authorization Header:", authorization);
+    // console.log("--- End Debug ---");
 
     const headers: Record<string, string> = {
       "content-type": contentType,
