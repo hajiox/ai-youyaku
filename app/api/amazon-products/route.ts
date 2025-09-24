@@ -90,13 +90,16 @@ export async function POST(req: NextRequest) {
     const body = JSON.stringify(bodyObj);
     const contentType = "application/json; charset=utf-8";
     const contentEncoding = "amz-1.0";
+    const payloadHash = sha256Hex(body);
 
     const canonicalHeaders =
       `content-type:${contentType}\n` +
       `host:${HOST}\n` +
+      `x-amz-content-sha256:${payloadHash}\n` +
       `x-amz-date:${amzDate}\n` +
       `x-amz-target:${TARGET}\n`;
-    const signedHeaders = "content-type;host;x-amz-date;x-amz-target";
+    const signedHeaders =
+      "content-type;host;x-amz-content-sha256;x-amz-date;x-amz-target";
 
     const canonicalRequest = [
       "POST",
@@ -104,7 +107,7 @@ export async function POST(req: NextRequest) {
       "",
       canonicalHeaders,
       signedHeaders,
-      sha256Hex(body),
+      payloadHash,
     ].join("\n");
 
     const credentialScope = `${dateStamp}/${REGION}/${SERVICE}/aws4_request`;
@@ -127,6 +130,7 @@ export async function POST(req: NextRequest) {
     const headers: Record<string, string> = {
       "content-type": contentType,
       "content-encoding": contentEncoding,
+      "x-amz-content-sha256": payloadHash,
       "x-amz-date": amzDate,
       "x-amz-target": TARGET,
       Authorization: authorization,
