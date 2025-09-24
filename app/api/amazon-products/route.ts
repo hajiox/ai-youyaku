@@ -219,7 +219,7 @@ export async function POST(req: NextRequest) {
       for (const item of items) {
         if (!item?.ASIN || !item?.DetailPageURL) continue;
         
-        const listing = item?.Offers?.Listings?>[0];
+        const listing = item?.Offers?.Listings?.[0];
         
         allProducts.push({
           asin: item.ASIN,
