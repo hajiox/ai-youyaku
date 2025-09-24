@@ -1,4 +1,4 @@
-// /app/api/amazon-products/route.ts ver.3
+// /app/api/amazon-products/route.ts ver.4
 
 export const runtime = "nodejs";
 
@@ -19,27 +19,23 @@ const RESOURCES = [
   "CustomerReviews.StarRating",
 ];
 
-// hmac 関数のキーの型を修正
-function hmac(key: crypto.BinaryLike, data: string): Buffer {
-  return crypto.createHmac("sha256", key).update(data).digest();
+// SHA-256ハッシュを計算する汎用関数
+function hash(string: string) {
+  return crypto.createHash("sha256").update(string).digest("hex");
 }
 
-function sha256Hex(data: string) {
-  return crypto.createHash("sha256").update(data).digest("hex");
+// HMAC-SHA256署名を生成する汎用関数
+function hmac(key: Buffer, string: string) {
+  return crypto.createHmac("sha256", key).update(string).digest();
 }
 
-function amzDates() {
-  const iso = new Date().toISOString().replace(/[:-]|\.\d{3}/g, "");
-  return { amzDate: iso, dateStamp: iso.slice(0, 8) };
-}
-
-// 修正箇所： signingKey 関数
-function signingKey(secretKey: string, dateStamp: string) {
-  // keyの前に`AWS4`を付加し、Bufferとして渡す
-  const kDate = hmac(Buffer.from("AWS4" + secretKey, "utf8"), dateStamp);
-  const kRegion = hmac(kDate, REGION);
-  const kService = hmac(kRegion, SERVICE);
-  return hmac(kService, "aws4_request");
+// 署名キーを派生させる関数
+function getSignatureKey(key: string, dateStamp: string, regionName: string, serviceName: string) {
+  const kDate = hmac(Buffer.from("AWS4" + key, "utf8"), dateStamp);
+  const kRegion = hmac(kDate, regionName);
+  const kService = hmac(kRegion, serviceName);
+  const kSigning = hmac(kService, "aws4_request");
+  return kSigning;
 }
 
 type Product = {
@@ -82,7 +78,9 @@ export async function POST(req: NextRequest) {
   const all: Product[] = [];
 
   for (const kw of keywords) {
-    const { amzDate, dateStamp } = amzDates();
+    const now = new Date();
+    const isoDate = now.toISOString().replace(/-/g, "").replace(/:/g, "").slice(0, 15) + "Z";
+    const dateStamp = isoDate.slice(0, 8);
 
     const bodyObj = {
       Keywords: kw,
@@ -92,68 +90,38 @@ export async function POST(req: NextRequest) {
       ItemCount: 6,
       Resources: RESOURCES,
     } as const;
+    const requestPayload = JSON.stringify(bodyObj);
 
-    const body = JSON.stringify(bodyObj);
-    const contentType = "application/json; charset=utf-8";
-    const contentEncoding = "amz-1.0";
-    const payloadHash = sha256Hex(body);
+    const canonicalHeaders = `content-type:application/json; charset=utf-8\nhost:${HOST}\nx-amz-date:${isoDate}\nx-amz-target:${TARGET}\n`;
+    const signedHeaders = "content-type;host;x-amz-date;x-amz-target";
+    const payloadHash = hash(requestPayload);
 
-    const canonicalHeaders =
-      `content-type:${contentType}\n` +
-      `host:${HOST}\n` +
-      `x-amz-content-sha256:${payloadHash}\n` +
-      `x-amz-date:${amzDate}\n` +
-      `x-amz-target:${TARGET}\n`;
-    const signedHeaders =
-      "content-type;host;x-amz-content-sha256;x-amz-date;x-amz-target";
+    const canonicalRequest = `POST\n${PATH}\n\n${canonicalHeaders}\n${signedHeaders}\n${payloadHash}`;
 
-    const canonicalRequest = [
-      "POST",
-      PATH,
-      "",
-      canonicalHeaders,
-      signedHeaders,
-      payloadHash,
-    ].join("\n");
-
-    const credentialScope = `${dateStamp}/${REGION}/${SERVICE}/aws4_request`;
-    const stringToSign = [
-      "AWS4-HMAC-SHA256",
-      amzDate,
-      credentialScope,
-      sha256Hex(canonicalRequest),
-    ].join("\n");
+    const stringToSign = `AWS4-HMAC-SHA256\n${isoDate}\n${dateStamp}/${REGION}/${SERVICE}/aws4_request\n${hash(canonicalRequest)}`;
 
     const signature = crypto
-      .createHmac("sha256", signingKey(secretKey, dateStamp))
+      .createHmac("sha256", getSignatureKey(secretKey, dateStamp, REGION, SERVICE))
       .update(stringToSign)
       .digest("hex");
 
-    const authorization =
-      `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, ` +
+    const authorizationHeader =
+      `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${dateStamp}/${REGION}/${SERVICE}/aws4_request, ` +
       `SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
-    // デバッグログを削除
-    // console.log("--- Amazon PA-API Request Debug ---");
-    // console.log("CanonicalRequest:", canonicalRequest);
-    // console.log("StringToSign:", stringToSign);
-    // console.log("Authorization Header:", authorization);
-    // console.log("--- End Debug ---");
-
     const headers: Record<string, string> = {
-      "content-type": contentType,
-      "content-encoding": contentEncoding,
-      "x-amz-content-sha256": payloadHash,
-      "x-amz-date": amzDate,
+      "content-type": "application/json; charset=utf-8",
+      "x-amz-date": isoDate,
       "x-amz-target": TARGET,
-      Authorization: authorization,
+      Authorization: authorizationHeader,
+      "x-amz-content-sha256": payloadHash,
     };
 
     try {
       const res = await fetch(`https://${HOST}${PATH}`, {
         method: "POST",
         headers,
-        body,
+        body: requestPayload,
         cache: "no-store",
       });
 
