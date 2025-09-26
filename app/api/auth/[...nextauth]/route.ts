@@ -1,4 +1,4 @@
-// /app/api/auth/[...nextauth]/route.ts ver.2
+// /app/api/auth/[...nextauth]/route.ts ver.3 - 固定ID版
 
 import NextAuth from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
@@ -13,7 +13,7 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async session({ session, token }) {
-      // 固定IDを使用（既存データとの整合性のため）
+      // 既存のデータベースIDと一致させる
       if (session?.user) {
         session.user.id = '065c6f7d-8f75-485c-a77c-bba493443e1e';
       }
@@ -28,4 +28,4 @@ export const authOptions: NextAuthOptions = {
 
 const handler = NextAuth(authOptions)
 
-export { handler as GET, handler as POST }
+export { handler as GET, handler as POST, authOptions }
