@@ -101,7 +101,7 @@ async function fetchUrlContent(url: string): Promise<{
 }
 
 /**
- * Gemini APIを呼び出す関数（2025年9月版）
+ * Gemini APIを呼び出す関数（Gemini 2.5 Flash-Lite固定版）
  */
 async function callGeminiAPI(prompt: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -110,125 +110,105 @@ async function callGeminiAPI(prompt: string): Promise<string> {
     throw new Error("GEMINI_API_KEY環境変数が設定されていません");
   }
 
-  // 2025年9月時点で利用可能なモデル（優先順位順）
-  const availableModels = [
-    'gemini-2.5-flash',      // 最新・推奨（高速・バランス型）
-    'gemini-2.5-flash-lite', // 軽量版（コスト最適化）
-    'gemini-2.0-flash',      // 安定版（100万トークンコンテキスト）
-    'gemini-1.5-flash',      // 旧バージョン（2025年9月24日廃止予定）
-  ];
+  // Gemini 2.5 Flash-Liteに固定（無料枠：1日1000回まで）
+  const modelName = 'gemini-2.5-flash-lite';
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+  
+  console.log(`Using Gemini model: ${modelName} (Free tier: 1000 requests/day)`);
 
-  let lastError: any = null;
-
-  // 各モデルを順番に試す
-  for (const modelName of availableModels) {
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-    
-    console.log(`Trying Gemini model: ${modelName}`);
-
-    const requestBody = {
-      contents: [
-        {
-          parts: [
-            {
-              text: prompt
-            }
-          ]
-        }
-      ],
-      generationConfig: {
-        temperature: 0.7,
-        topP: 0.95,  // topKは削除（Gemini 1.0 Pro Vision以降では使用不可）
-        maxOutputTokens: 2048,
-      },
-      safetySettings: [
-        {
-          category: "HARM_CATEGORY_HARASSMENT",
-          threshold: "BLOCK_NONE"
-        },
-        {
-          category: "HARM_CATEGORY_HATE_SPEECH",
-          threshold: "BLOCK_NONE"
-        },
-        {
-          category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-          threshold: "BLOCK_NONE"
-        },
-        {
-          category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-          threshold: "BLOCK_NONE"
-        }
-      ]
-    };
-
-    try {
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // x-goog-api-keyヘッダーは不要（URLパラメータで認証）
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        
-        if (text) {
-          console.log(`Success with Gemini model: ${modelName}`);
-          return text.trim();
-        }
-      } else {
-        const errorText = await response.text();
-        console.error(`Failed with model ${modelName}:`, response.status, errorText);
-        lastError = { status: response.status, message: errorText, model: modelName };
-        
-        // レート制限エラーの場合は待機
-        if (response.status === 429) {
-          console.log('Rate limit hit, waiting 60 seconds...');
-          await new Promise(resolve => setTimeout(resolve, 60000));
-          continue;
-        }
-        
-        // 400番台エラー（認証エラーなど）の場合は即座に終了
-        if (response.status >= 400 && response.status < 500 && response.status !== 404) {
-          try {
-            const errorData = JSON.parse(errorText);
-            throw new Error(`Gemini API認証エラー: ${errorData.error?.message || 'APIキーが無効です'}`);
-          } catch (e) {
-            if (e instanceof Error && e.message.includes('API認証エラー')) {
-              throw e;
-            }
-            throw new Error(`Gemini APIエラー (${response.status}): ${errorText}`);
+  const requestBody = {
+    contents: [
+      {
+        parts: [
+          {
+            text: prompt
           }
+        ]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.7,
+      topP: 0.95,
+      maxOutputTokens: 2048,
+    },
+    safetySettings: [
+      {
+        category: "HARM_CATEGORY_HARASSMENT",
+        threshold: "BLOCK_NONE"
+      },
+      {
+        category: "HARM_CATEGORY_HATE_SPEECH",
+        threshold: "BLOCK_NONE"
+      },
+      {
+        category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        threshold: "BLOCK_NONE"
+      },
+      {
+        category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+        threshold: "BLOCK_NONE"
+      }
+    ]
+  };
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      
+      if (text) {
+        console.log(`Success with Gemini 2.5 Flash-Lite`);
+        return text.trim();
+      } else {
+        throw new Error("Geminiからの応答にテキストが含まれていませんでした");
+      }
+    } else {
+      const errorText = await response.text();
+      console.error(`Gemini API error:`, response.status, errorText);
+      
+      // レート制限エラーの場合
+      if (response.status === 429) {
+        throw new Error(`無料利用枠（1日1000回）を超過しました。明日またお試しください。`);
+      }
+      
+      // 認証エラーの場合
+      if (response.status === 400 || response.status === 401 || response.status === 403) {
+        try {
+          const errorData = JSON.parse(errorText);
+          throw new Error(`Gemini API認証エラー: ${errorData.error?.message || 'APIキーが無効です。Google AI Studioで新しいAPIキーを生成してください。'}`);
+        } catch (e) {
+          if (e instanceof Error && e.message.includes('API認証エラー')) {
+            throw e;
+          }
+          throw new Error(`Gemini APIエラー (${response.status}): APIキーを確認してください`);
         }
       }
-    } catch (error) {
-      console.error(`Error with model ${modelName}:`, error);
       
-      // 認証エラーは即座に再throw
-      if (error instanceof Error && error.message.includes('API認証エラー')) {
-        throw error;
+      // 404エラーの場合（モデルが見つからない）
+      if (response.status === 404) {
+        throw new Error(`モデル '${modelName}' が見つかりません。利用可能なモデルを確認してください。`);
       }
       
-      lastError = error;
-      // 他のモデルを試す
-      continue;
+      // その他のエラー
+      throw new Error(`Gemini APIエラー (${response.status}): ${errorText}`);
     }
+  } catch (error) {
+    console.error(`Error with Gemini 2.5 Flash-Lite:`, error);
+    
+    if (error instanceof Error) {
+      throw error;
+    }
+    
+    throw new Error(`Gemini API接続エラー: ${String(error)}`);
   }
-
-  // すべてのモデルで失敗した場合
-  const errorMessage = lastError?.message || JSON.stringify(lastError) || 'Unknown error';
-  throw new Error(`すべてのGeminiモデルで失敗しました。最後のエラー: ${errorMessage}
-
-考えられる原因:
-1. APIキーが無効または期限切れ
-2. 無料枠の制限に達した（1日の制限を確認してください）
-3. Google AI StudioでAPIキーを再生成してください
-
-利用可能なモデル一覧を確認するには:
-curl "https://generativelanguage.googleapis.com/v1beta/models?key=YOUR_API_KEY"`);
 }
 
 /**
