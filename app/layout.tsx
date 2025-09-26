@@ -1,10 +1,17 @@
-// app/layout.tsx ver.2 - SEO最適化版
+// app/layout.tsx ver.3 - ビューポート修正版
 
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
+
+// ビューポート設定を分離
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+}
 
 // SEOとOGP最適化されたメタデータ
 export const metadata: Metadata = {
@@ -77,12 +84,6 @@ export const metadata: Metadata = {
   
   // アプリケーション名
   applicationName: 'AI記事要約.com',
-  
-  // ビューポート
-  viewport: 'width=device-width, initial-scale=1',
-  
-  // 文字エンコーディング
-  // charset: 'utf-8', // Next.js 15では自動設定
 }
 
 export default function RootLayout({
