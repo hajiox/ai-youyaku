@@ -13,9 +13,9 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async session({ session, token }) {
-      // emailをIDとして追加
-      if (session?.user?.email) {
-        session.user.id = session.user.email
+      // 固定IDを使用（既存データとの整合性のため）
+      if (session?.user) {
+        session.user.id = '065c6f7d-8f75-485c-a77c-bba493443e1e';
       }
       return session
     },
