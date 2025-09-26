@@ -110,7 +110,7 @@ async function callGeminiAPI(prompt: string): Promise<string> {
     throw new Error("GEMINI_API_KEY環境変数が設定されていません");
   }
 
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
   const requestBody = {
     contents: [
@@ -159,7 +159,20 @@ async function callGeminiAPI(prompt: string): Promise<string> {
   if (!response.ok) {
     const errorText = await response.text();
     console.error('Gemini API error:', response.status, errorText);
-    throw new Error(`Gemini API error: ${response.status}`);
+    
+    // エラー内容の詳細を解析
+    try {
+      const errorData = JSON.parse(errorText);
+      if (errorData.error?.code === 404) {
+        throw new Error(`APIキーまたはモデル名が無効です。環境変数GEMINI_API_KEYを確認してください。`);
+      }
+      if (errorData.error?.code === 429) {
+        throw new Error(`無料利用枠を超過しました。明日再度お試しください。`);
+      }
+      throw new Error(`Gemini API error: ${errorData.error?.message || response.status}`);
+    } catch {
+      throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
+    }
   }
 
   const data = await response.json();
