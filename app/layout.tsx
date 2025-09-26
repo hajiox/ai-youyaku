@@ -1,4 +1,4 @@
-// /app/layout.tsx ver.4 - SessionProvider追加版
+// /app/layout.tsx ver.5 - OGP画像URL修正版
 
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
     type: 'website',
     images: [
       {
-        url: '/aiyouyaku.png',
+        url: 'https://youyaku.aizubrandhall-lp2.com/aiyouyaku.png',  // 絶対URLに変更
         width: 1200,
         height: 630,
         alt: 'AI記事要約.com - AIブロックを回避して記事を要約',
@@ -57,7 +57,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'AI記事要約.com｜AIが読めない記事も要約',
     description: 'ChatGPTやGeminiがアクセスできない有料記事・AI出禁サイトも簡単要約。URLを貼るだけ。',
-    images: ['/aiyouyaku.png'],
+    images: ['https://youyaku.aizubrandhall-lp2.com/aiyouyaku.png'],  // 絶対URLに変更
     creator: '@yourakuaizubrand',
   },
   
