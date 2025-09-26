@@ -1,0 +1,192 @@
+// /lib/supabaseAuthSwitcher.ts ver.2
+
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import type { Provider } from '@supabase/supabase-js'
+
+/**
+ * アカウント切り替えユーティリティ
+ */
+export class SupabaseAuthSwitcher {
+  private supabase = createClientComponentClient()
+
+  /**
+   * 現在のセッションを取得
+   */
+  async getCurrentSession() {
+    const { data: { session }, error } = await this.supabase.auth.getSession()
+    if (error) {
+      console.error('セッション取得エラー:', error)
+      return null
+    }
+    return session
+  }
+
+  /**
+   * 別アカウントでログイン（自動切り替え）
+   * @param provider - ログインプロバイダー ('google', 'github', etc.)
+   * @param options - 追加オプション
+   */
+  async switchAccount(
+    provider: Provider,
+    options?: {
+      redirectTo?: string
+      scopes?: string
+      queryParams?: Record<string, string>
+    }
+  ) {
+    try {
+      // 1. 現在のセッションを確認
+      const currentSession = await this.getCurrentSession()
+      
+      if (currentSession) {
+        console.log('既存セッションを検出:', currentSession.user.email)
+        
+        // 2. 現在のユーザーをログアウト
+        const { error: signOutError } = await this.supabase.auth.signOut()
+        if (signOutError) {
+          console.error('ログアウトエラー:', signOutError)
+          // エラーがあってもプロセスを続行
+        }
+        
+        // 3. ログアウト完了を待つ（重要）
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+
+      // 4. 新しいアカウントでログイン
+      const { data, error } = await this.supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: options?.redirectTo || `${window.location.origin}/auth/callback`,
+          scopes: options?.scopes,
+          queryParams: {
+            prompt: 'select_account', // Googleの場合、アカウント選択画面を強制表示
+            ...options?.queryParams
+          }
+        }
+      })
+
+      if (error) {
+        throw error
+      }
+
+      return { success: true, data }
+      
+    } catch (error) {
+      console.error('アカウント切り替えエラー:', error)
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : '不明なエラーが発生しました' 
+      }
+    }
+  }
+
+  /**
+   * メールでアカウント切り替え
+   */
+  async switchAccountWithEmail(
+    email: string,
+    password?: string,
+    options?: {
+      redirectTo?: string
+    }
+  ) {
+    try {
+      // 1. 現在のユーザーをログアウト
+      const currentSession = await this.getCurrentSession()
+      if (currentSession) {
+        await this.supabase.auth.signOut()
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+
+      // 2. 新しいアカウントでログイン
+      if (password) {
+        // パスワードログイン
+        const { data, error } = await this.supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+        if (error) throw error
+        return { success: true, data }
+        
+      } else {
+        // マジックリンクログイン
+        const { data, error } = await this.supabase.auth.signInWithOtp({
+          email,
+          options: {
+            emailRedirectTo: options?.redirectTo || `${window.location.origin}/auth/callback`,
+          }
+        })
+        if (error) throw error
+        return { success: true, data, message: 'メールを確認してください' }
+      }
+      
+    } catch (error) {
+      console.error('メールアカウント切り替えエラー:', error)
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : '不明なエラーが発生しました' 
+      }
+    }
+  }
+
+  /**
+   * クイックスイッチ機能
+   * ローカルストレージに保存された以前のアカウント情報を使用
+   */
+  async quickSwitch() {
+    const savedAccounts = this.getSavedAccounts()
+    if (savedAccounts.length === 0) {
+      return { success: false, error: 'No saved accounts' }
+    }
+    
+    // 最後に使用したアカウントに切り替え
+    const lastAccount = savedAccounts[0]
+    return this.switchAccount(lastAccount.provider as Provider)
+  }
+
+  /**
+   * アカウント情報を保存（セキュリティ注意）
+   */
+  private saveAccountInfo(email: string, provider: string) {
+    const accounts = this.getSavedAccounts()
+    const newAccount = { email, provider, lastUsed: new Date().toISOString() }
+    
+    // 重複を削除して追加
+    const filtered = accounts.filter(acc => acc.email !== email)
+    filtered.unshift(newAccount)
+    
+    // 最大5アカウントまで保存
+    const limited = filtered.slice(0, 5)
+    
+    localStorage.setItem('supabase_saved_accounts', JSON.stringify(limited))
+  }
+
+  /**
+   * 保存されたアカウント情報を取得
+   */
+  getSavedAccounts(): Array<{ email: string; provider: string; lastUsed: string }> {
+    try {
+      const saved = localStorage.getItem('supabase_saved_accounts')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  }
+
+  /**
+   * セッション変更の監視
+   */
+  onAuthStateChange(callback: (event: string, session: any) => void) {
+    return this.supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        // ログイン成功時、アカウント情報を保存
+        const provider = session.user.app_metadata.provider || 'email'
+        this.saveAccountInfo(session.user.email!, provider)
+      }
+      callback(event, session)
+    })
+  }
+}
+
+// シングルトンインスタンスをエクスポート
+export const authSwitcher = new SupabaseAuthSwitcher()
