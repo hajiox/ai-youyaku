@@ -1,21 +1,17 @@
-// /app/api/tone-sample/route.ts ver.5 - 固定UUID使用のシンプル版
-
-import { NextResponse } from 'next/server';
+// app/api/tone-sample/route.ts
+import { NextResponse }    from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { authOptions }     from '@/app/api/auth/[...nextauth]/route';
+import { supabaseAdmin }   from '@/lib/supabaseAdmin';
 
 // 無料ユーザーの口調サンプル上限
 const FREE_USER_TONE_SAMPLE_MAX = 2000;
 
-// 既存データのUUID（データベースに保存済み）
-const EXISTING_USER_ID = '065c6f7d-8f75-485c-a77c-bba493443e1e';
-
 export async function POST(req: Request) {
   // 1. 認証チェック
   const session = await getServerSession(authOptions);
-  
-  if (!session?.user) {
+  const userId  = session?.user?.id;
+  if (!userId) {
     return NextResponse.json({ error: '認証されていません。' }, { status: 401 });
   }
 
@@ -26,15 +22,11 @@ export async function POST(req: Request) {
   }
   let sample = toneSample.slice(0, FREE_USER_TONE_SAMPLE_MAX);
 
-  // 3. Upsert（既存のUUIDを使用）
+  // 3. Upsert and select via supabaseAdmin
   const { data, error } = await supabaseAdmin
     .from('user_tone_samples')
     .upsert(
-      { 
-        user_id: EXISTING_USER_ID, 
-        tone_sample: sample, 
-        character_limit: FREE_USER_TONE_SAMPLE_MAX 
-      },
+      { user_id: userId, tone_sample: sample, character_limit: FREE_USER_TONE_SAMPLE_MAX },
       { onConflict: 'user_id' }
     )
     .select('*')
@@ -51,23 +43,22 @@ export async function POST(req: Request) {
 
 // 既存の口調サンプルを取得するエンドポイント
 export async function GET(req: Request) {
-  const session = await getServerSession(authOptions);
-  
-  if (!session?.user) {
-    return NextResponse.json({ error: '認証されていません。' }, { status: 401 });
+  const session = await getServerSession(authOptions)
+  const userId  = session?.user?.id
+  if (!userId) {
+    return NextResponse.json({ error: '認証されていません。' }, { status: 401 })
   }
 
-  // 既存のUUIDでデータ取得
   const { data, error } = await supabaseAdmin
     .from('user_tone_samples')
     .select('tone_sample')
-    .eq('user_id', EXISTING_USER_ID)
-    .single();
+    .eq('user_id', userId)
+    .single()
 
   if (error && error.code !== 'PGRST116') {
-    console.error('TONE SAMPLE FETCH ERROR', error);
-    return NextResponse.json({ error: '口調サンプルの取得に失敗しました。' }, { status: 500 });
+    console.error('TONE SAMPLE FETCH ERROR', error)
+    return NextResponse.json({ error: '口調サンプルの取得に失敗しました。' }, { status: 500 })
   }
 
-  return NextResponse.json({ toneSample: data?.tone_sample || '' }, { status: 200 });
+  return NextResponse.json({ toneSample: data?.tone_sample || '' }, { status: 200 })
 }
