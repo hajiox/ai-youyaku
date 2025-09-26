@@ -1,4 +1,4 @@
-// /app/api/tone-sample/route.ts ver.3 - email基準での動作修正版
+// /app/api/tone-sample/route.ts ver.5 - 固定UUID使用のシンプル版
 
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
@@ -8,12 +8,14 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 // 無料ユーザーの口調サンプル上限
 const FREE_USER_TONE_SAMPLE_MAX = 2000;
 
+// 既存データのUUID（データベースに保存済み）
+const EXISTING_USER_ID = '065c6f7d-8f75-485c-a77c-bba493443e1e';
+
 export async function POST(req: Request) {
   // 1. 認証チェック
   const session = await getServerSession(authOptions);
-  const userEmail = session?.user?.email;
   
-  if (!userEmail) {
+  if (!session?.user) {
     return NextResponse.json({ error: '認証されていません。' }, { status: 401 });
   }
 
@@ -24,12 +26,12 @@ export async function POST(req: Request) {
   }
   let sample = toneSample.slice(0, FREE_USER_TONE_SAMPLE_MAX);
 
-  // 3. Upsert（emailをuser_idとして使用）
+  // 3. Upsert（既存のUUIDを使用）
   const { data, error } = await supabaseAdmin
     .from('user_tone_samples')
     .upsert(
       { 
-        user_id: userEmail, 
+        user_id: EXISTING_USER_ID, 
         tone_sample: sample, 
         character_limit: FREE_USER_TONE_SAMPLE_MAX 
       },
@@ -50,17 +52,16 @@ export async function POST(req: Request) {
 // 既存の口調サンプルを取得するエンドポイント
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
-  const userEmail = session?.user?.email;
   
-  if (!userEmail) {
+  if (!session?.user) {
     return NextResponse.json({ error: '認証されていません。' }, { status: 401 });
   }
 
-  // emailで検索（現在のemailがhajixo@gmail.comの場合）
+  // 既存のUUIDでデータ取得
   const { data, error } = await supabaseAdmin
     .from('user_tone_samples')
     .select('tone_sample')
-    .eq('user_id', userEmail)
+    .eq('user_id', EXISTING_USER_ID)
     .single();
 
   if (error && error.code !== 'PGRST116') {
