@@ -1,4 +1,4 @@
-// /app/api/auth/[...nextauth]/route.ts ver.3 - 固定ID版
+// /app/api/auth/[...nextauth]/route.ts ver.4 - エクスポート重複修正版
 
 import NextAuth from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
@@ -28,4 +28,4 @@ export const authOptions: NextAuthOptions = {
 
 const handler = NextAuth(authOptions)
 
-export { handler as GET, handler as POST, authOptions }
+export { handler as GET, handler as POST }
