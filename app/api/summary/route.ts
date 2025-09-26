@@ -104,13 +104,19 @@ async function fetchUrlContent(url: string): Promise<{
  * Gemini APIを呼び出す関数
  */
 async function callGeminiAPI(prompt: string): Promise<string> {
+  // デバッグ用：APIキーの状態を確認
   const apiKey = process.env.GEMINI_API_KEY;
   
   if (!apiKey) {
+    console.error("GEMINI_API_KEY is undefined");
     throw new Error("GEMINI_API_KEY環境変数が設定されていません");
   }
+  
+  console.log("API Key length:", apiKey.length); // キーの長さを確認（通常39文字）
+  console.log("API Key first 10 chars:", apiKey.substring(0, 10)); // 最初の10文字だけログ
 
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  // Gemini Pro（より安定）を試す
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
 
   const requestBody = {
     contents: [
