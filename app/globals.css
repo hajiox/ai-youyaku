@@ -1,9 +1,29 @@
+/* app/globals.css ver.2 */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 body {
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* フッター位置修正用のスタイル追加 */
+html, body {
+  min-height: 100vh;
+}
+
+main {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+main > .grid {
+  flex: 1;
+}
+
+footer {
+  margin-top: auto;
 }
 
 @layer utilities {
