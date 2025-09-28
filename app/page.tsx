@@ -7,9 +7,9 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import AmazonProductShowcase, {
   AmazonProduct as AmazonProductType,
 } from "./components/AmazonProductShowcase";
-import ToneSampleModal from "./components/ToneSampleModal"; // â˜… ã‚¤ãƒ³ãƒãƒ¼ãƒˆãƒ‘ã‚¹ã‚’ç›¸å¯¾ãƒ‘ã‚¹ã«å¤‰æ›´
+import ToneSampleModal from "./components/ToneSampleModal"; // ★ インポートパスを相対パスに変更
 
-// APIã‹ã‚‰è¿”ã£ã¦ãã‚‹å£èª¿ã‚µãƒ³ãƒ—ãƒ«ã®åž‹ (å°†æ¥çš„ã«GETã§ä½¿ã†å ´åˆ)
+// APIから返ってくる口調サンプルの型 (将来的にGETで使う場合)
 // interface UserToneSampleData {
 //   id: string;
 //   user_id: string;
@@ -19,7 +19,7 @@ import ToneSampleModal from "./components/ToneSampleModal"; // â˜… ã‚¤ã
 //   updated_at: string;
 // }
 
-// ç„¡æ–™ãƒ¦ãƒ¼ã‚¶ãƒ¼ã®å£èª¿ã‚µãƒ³ãƒ—ãƒ«ã®æœ€å¤§æ–‡å­—æ•° (APIå´ã¨åˆã‚ã›ã‚‹)
+// 無料ユーザーの口調サンプルの最大文字数 (API側と合わせる)
 const FREE_USER_TONE_SAMPLE_MAX_LENGTH = 2000;
 
 export default function Home() {
@@ -46,7 +46,7 @@ export default function Home() {
   );
 
   const extractKeywords = (text: string, max: number = 3): string[] => {
-    const tokens = text.match(/[\p{Script=Han}ã€…]+|[ã‚¡-ãƒ¶ãƒ¼]+|[a-zA-Z]+/gu) || [];
+    const tokens = text.match(/[\p{Script=Han}々]+|[ァ-ヶー]+|[a-zA-Z]+/gu) || [];
     const freq: Record<string, number> = {};
     tokens.forEach((t) => {
       if (t.length < 2) return;
@@ -63,13 +63,13 @@ export default function Home() {
     selectedTone: "casual" | "formal" | "custom"
   ) => {
     if (!url) {
-      alert("URLã‚’å…¥åŠ›ã—ã¦ãã ã•ã„");
+      alert("URLを入力してください");
       return;
     }
     if (isLoading) return;
 
     if (selectedTone === "custom" && !currentDbSample) {
-      alert("è‡ªåˆ†ã®å£èª¿ã‚µãƒ³ãƒ—ãƒ«ãŒç™»éŒ²ã•ã‚Œã¦ã„ã¾ã›ã‚“ã€‚");
+      alert("自分の口調サンプルが登録されていません。");
       return;
     }
 
@@ -105,25 +105,25 @@ export default function Home() {
       let longData: any = {};
 
       if (!shortRes.ok) {
-        shortError = `200æ–‡å­—è¦ç´„ã‚¨ãƒ©ãƒ¼: ${shortRes.status}`;
+        shortError = `200文字要約エラー: ${shortRes.status}`;
         try { shortData = await shortRes.json(); if(shortData.error) shortError = shortData.error; } catch {}
       } else {
         shortData = await shortRes.json();
       }
 
       if (!longRes.ok) {
-        longError = `1000æ–‡å­—è¦ç´„ã‚¨ãƒ©ãƒ¼: ${longRes.status}`;
+        longError = `1000文字要約エラー: ${longRes.status}`;
         try { longData = await longRes.json(); if(longData.error) longError = longData.error; } catch {}
       } else {
         longData = await longRes.json();
       }
 
       if (shortError || longError) {
-        throw new Error(shortError || longError || "è¦ç´„ä¸­ã«ã‚¨ãƒ©ãƒ¼ãŒç™ºç”Ÿã—ã¾ã—ãŸ");
+        throw new Error(shortError || longError || "要約中にエラーが発生しました");
       }
 
-      setShortSummary(shortData.result || "200æ–‡å­—è¦ç´„ã®å–å¾—ã«å¤±æ•—ã—ã¾ã—ãŸ");
-      setLongSummary(longData.result || "1000æ–‡å­—è¦ç´„ã®å–å¾—ã«å¤±æ•—ã—ã¾ã—ãŸ");
+      setShortSummary(shortData.result || "200文字要約の取得に失敗しました");
+      setLongSummary(longData.result || "1000文字要約の取得に失敗しました");
 
       if (shortData.truncated !== undefined) {
         setProcessedInfo({
@@ -141,7 +141,7 @@ export default function Home() {
 
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "è¦ç´„ä¸­ã«ä¸æ˜Žãªã‚¨ãƒ©ãƒ¼ãŒç™ºç”Ÿã—ã¾ã—ãŸ");
+      setError(err.message || "要約中に不明なエラーが発生しました");
       setShortSummary("");
       setLongSummary("");
     } finally {
@@ -153,11 +153,11 @@ export default function Home() {
     if (!text) return;
     navigator.clipboard.writeText(text)
       .then(() => {
-        alert("ã‚³ãƒ”ãƒ¼ã—ã¾ã—ãŸï¼");
+        alert("コピーしました！");
       })
       .catch(err => {
-        console.error("ã‚³ãƒ”ãƒ¼ã«å¤±æ•—ã—ã¾ã—ãŸ: ", err);
-        alert("ã‚³ãƒ”ãƒ¼ã«å¤±æ•—ã—ã¾ã—ãŸã€‚");
+        console.error("コピーに失敗しました: ", err);
+        alert("コピーに失敗しました。");
       });
   };
 
@@ -185,7 +185,7 @@ export default function Home() {
     };
   }, [showContactModal, showToneSampleModal]);
 
-  // ãƒ­ã‚°ã‚¤ãƒ³å¾Œã«å£èª¿ã‚µãƒ³ãƒ—ãƒ«ã‚’å–å¾—
+  // ログイン後に口調サンプルを取得
   useEffect(() => {
     if (status === "authenticated") {
       fetch('/api/tone-sample', { cache: 'no-store' })
@@ -201,7 +201,7 @@ export default function Home() {
     }
   }, [status]);
 
-  // è¦ç´„æ–‡ã‹ã‚‰Amazonæ¤œç´¢ç”¨ã‚­ãƒ¼ãƒ¯ãƒ¼ãƒ‰ã‚’æŠ½å‡º
+  // 要約文からAmazon検索用キーワードを抽出
   useEffect(() => {
     const summaryText = longSummary || shortSummary;
     if (summaryText) {
@@ -236,7 +236,7 @@ export default function Home() {
         });
 
         if (!response.ok) {
-          throw new Error("Amazonå•†å“ã®å–å¾—ã«å¤±æ•—ã—ã¾ã—ãŸã€‚");
+          throw new Error("Amazon商品の取得に失敗しました。");
         }
 
         const data: { products?: AmazonProductType[]; error?: string } =
@@ -256,7 +256,7 @@ export default function Home() {
           console.error("Failed to fetch Amazon products", err);
           setAmazonProducts([]);
           setAmazonProductsError(
-            err?.message || "Amazonå•†å“ã®å–å¾—ã«å¤±æ•—ã—ã¾ã—ãŸã€‚"
+            err?.message || "Amazon商品の取得に失敗しました。"
           );
         }
       } finally {
@@ -292,19 +292,19 @@ export default function Home() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'å£èª¿ã‚µãƒ³ãƒ—ãƒ«ã®ä¿å­˜ã«å¤±æ•—ã—ã¾ã—ãŸã€‚');
+        throw new Error(result.error || '口調サンプルの保存に失敗しました。');
       }
-      setToneSampleSuccessMessage(result.message || 'å£èª¿ã‚µãƒ³ãƒ—ãƒ«ã‚’ä¿å­˜ã—ã¾ã—ãŸï¼');
+      setToneSampleSuccessMessage(result.message || '口調サンプルを保存しました！');
       setCurrentDbSample(sampleToSave);
       setTimeout(() => {
         setShowToneSampleModal(false);
-        // æˆåŠŸãƒ¡ãƒƒã‚»ãƒ¼ã‚¸ã‚‚å°‘ã—é…ã‚Œã¦æ¶ˆã™ã‹ã€ãƒ¢ãƒ¼ãƒ€ãƒ«ã‚’é–‰ã˜ã‚‹ã‚¿ã‚¤ãƒŸãƒ³ã‚°ã§ã‚¯ãƒªã‚¢ã™ã‚‹
+        // 成功メッセージも少し遅れて消すか、モーダルを閉じるタイミングでクリアする
         setTimeout(() => setToneSampleSuccessMessage(null), 1500);
       }, 1500);
 
     } catch (err: any) {
       console.error("Failed to save tone sample:", err);
-      setToneSampleError(err.message || 'å£èª¿ã‚µãƒ³ãƒ—ãƒ«ã®ä¿å­˜ä¸­ã«ã‚¨ãƒ©ãƒ¼ãŒç™ºç”Ÿã—ã¾ã—ãŸã€‚');
+      setToneSampleError(err.message || '口調サンプルの保存中にエラーが発生しました。');
     } finally {
       setIsSavingToneSample(false);
     }
@@ -316,14 +316,14 @@ export default function Home() {
       <div className="grid w-full max-w-6xl gap-6 lg:grid-cols-[1.05fr_minmax(260px,0.95fr)]">
         <div className="w-full rounded-lg bg-white p-6 shadow-md">
         <h1 className="text-3xl font-semibold mb-2 text-center text-blue-600">
-          AIè¨˜äº‹è¦ç´„.com
+          AI記事要約.com
         </h1>
         <p className="text-sm text-slate-500 mb-6 text-center">
-          è¨˜äº‹URLã‚’ãƒšãƒ¼ã‚¹ãƒˆã—ã¦ã€ãŠå¥½ã¿ã®ã‚¹ã‚¿ã‚¤ãƒ«ã§AIãŒè¦ç´„ã—ã¾ã™ã€‚
+          記事URLをペーストして、お好みのスタイルでAIが要約します。
         </p>
 
         <div className="text-xs text-slate-500 mb-4 text-right pr-1">
-          {status === "loading" && <p>èª­è¾¼ä¸­...</p>}
+          {status === "loading" && <p>読込中...</p>}
           {status === "authenticated" && session?.user && (
             <div className="flex items-center justify-end space-x-2">
               {session.user.image && (
@@ -334,7 +334,7 @@ export default function Home() {
                 onClick={() => signOut()}
                 className="px-2 py-0.5 border border-slate-300 rounded hover:bg-slate-100 text-slate-600 text-[10px]"
               >
-                ãƒ­ã‚°ã‚¢ã‚¦ãƒˆ
+                ログアウト
               </button>
             </div>
           )}
@@ -343,7 +343,7 @@ export default function Home() {
               onClick={() => signIn("google")}
               className="px-2 py-0.5 border border-slate-300 rounded hover:bg-slate-100 text-slate-600 text-[10px]"
             >
-              Googleãƒ­ã‚°ã‚¤ãƒ³
+              Googleログイン
             </button>
           )}
         </div>
@@ -358,7 +358,7 @@ export default function Home() {
               }}
               className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs rounded-md font-medium hover:bg-slate-200 border border-slate-300"
             >
-              è‡ªåˆ†ã®å£èª¿ã‚’ç™»éŒ²ãƒ»ç·¨é›†ã™ã‚‹
+              自分の口調を登録・編集する
             </button>
           </div>
         )}
@@ -368,7 +368,7 @@ export default function Home() {
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="è¨˜äº‹URLã‚’å…¥åŠ›"
+            placeholder="記事URLを入力"
             className="w-full text-base p-3 border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             disabled={isLoading}
           />
@@ -382,7 +382,7 @@ export default function Home() {
             }`}
             disabled={isLoading}
           >
-            {isLoading ? "å‡¦ç†ä¸­..." : "ã‚«ã‚¸ãƒ¥ã‚¢ãƒ«"}
+            {isLoading ? "処理中..." : "カジュアル"}
           </button>
           <button
             onClick={() => handleSummarize("formal")}
@@ -391,7 +391,7 @@ export default function Home() {
             }`}
             disabled={isLoading}
           >
-            {isLoading ? "å‡¦ç†ä¸­..." : "ãƒ•ã‚©ãƒ¼ãƒžãƒ«"}
+            {isLoading ? "処理中..." : "フォーマル"}
           </button>
           {status === "authenticated" && (
             <button
@@ -401,7 +401,7 @@ export default function Home() {
               }`}
               disabled={isLoading || !currentDbSample}
             >
-              {isLoading ? "å‡¦ç†ä¸­..." : "è‡ªåˆ†ã®å£èª¿"}
+              {isLoading ? "処理中..." : "自分の口調"}
             </button>
           )}
         </div>
@@ -413,7 +413,7 @@ export default function Home() {
               isLoading || (!url && !shortSummary && !longSummary && !error)
             }
           >
-            ãƒªã‚»ãƒƒãƒˆ
+            リセット
           </button>
         </div>
 
@@ -425,19 +425,19 @@ export default function Home() {
 
         {processedInfo && processedInfo.truncated && (
           <div className="mb-4 p-3 bg-yellow-50 border border-yellow-300 text-yellow-600 rounded-md text-sm">
-            <p>â„¹ï¸ è¨˜äº‹ãŒé•·ã„ãŸã‚ã€å…ˆé ­{processedInfo.processedLength.toLocaleString()}æ–‡å­—ã§è¦ç´„ã—ã¾ã—ãŸã€‚(åŽŸæ–‡: {processedInfo.originalLength.toLocaleString()}æ–‡å­—)</p>
+            <p>ℹ️ 記事が長いため、先頭{processedInfo.processedLength.toLocaleString()}文字で要約しました。(原文: {processedInfo.originalLength.toLocaleString()}文字)</p>
           </div>
         )}
 
         {shortSummary && (
           <div className="mt-6 p-4 border border-slate-200 rounded-md bg-white">
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-lg font-semibold text-slate-700">200å­—è¦ç´„</h2>
+              <h2 className="text-lg font-semibold text-slate-700">200字要約</h2>
               <button
                 onClick={() => copyText(shortSummary)}
                 className="text-xs text-white bg-slate-500 px-3 py-1 rounded hover:bg-slate-600 transition-colors"
               >
-                ã‚³ãƒ”ãƒ¼
+                コピー
               </button>
             </div>
             <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap break-words">{shortSummary}</p>
@@ -447,12 +447,12 @@ export default function Home() {
         {longSummary && (
           <div className="mt-4 p-4 border border-slate-200 rounded-md bg-white">
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-lg font-semibold text-slate-700">1000å­—è¦ç´„</h2>
+              <h2 className="text-lg font-semibold text-slate-700">1000字要約</h2>
               <button
                 onClick={() => copyText(longSummary)}
                 className="text-xs text-white bg-slate-500 px-3 py-1 rounded hover:bg-slate-600 transition-colors"
               >
-                ã‚³ãƒ”ãƒ¼
+                コピー
               </button>
             </div>
             <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap break-words">{longSummary}</p>
@@ -474,42 +474,42 @@ export default function Home() {
             onClick={() => setShowContactModal(true)}
             className="hover:underline focus:outline-none"
           >
-            ã”é€£çµ¡ã¯ã“ã¡ã‚‰
+            ご連絡はこちら
           </button>
         </p>
         <p className="mb-1 text-[10px] leading-tight px-2">
-          å½“ã‚µã‚¤ãƒˆã¯ã€Amazon.co.jpã‚’å®£ä¼ã—ãƒªãƒ³ã‚¯ã™ã‚‹ã“ã¨ã«ã‚ˆã£ã¦ã‚µã‚¤ãƒˆãŒç´¹ä»‹æ–™ã‚’ç²å¾—ã§ãã‚‹æ‰‹æ®µã‚’æä¾›ã™ã‚‹ã“ã¨ã‚’ç›®çš„ã«è¨­å®šã•ã‚ŒãŸã‚¢ãƒ•ã‚£ãƒªã‚¨ã‚¤ãƒˆãƒ—ãƒ­ã‚°ãƒ©ãƒ ã§ã‚ã‚‹ã€Amazonã‚¢ã‚½ã‚·ã‚¨ã‚¤ãƒˆãƒ»ãƒ—ãƒ­ã‚°ãƒ©ãƒ ã®å‚åŠ è€…ã§ã™ã€‚
+          当サイトは、Amazon.co.jpを宣伝しリンクすることによってサイトが紹介料を獲得できる手段を提供することを目的に設定されたアフィリエイトプログラムである、Amazonアソシエイト・プログラムの参加者です。
         </p>
-        <p className="mt-1">Â© {new Date().getFullYear()} AIè¨˜äº‹è¦ç´„.com</p>
+        <p className="mt-1">© {new Date().getFullYear()} AI記事要約.com</p>
       </footer>
 
       {showContactModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-slate-700">ã”é€£çµ¡</h2>
+              <h2 className="text-xl font-semibold text-slate-700">ご連絡</h2>
               <button
                 onClick={() => setShowContactModal(false)}
                 className="text-slate-500 hover:text-slate-700 text-2xl font-bold"
               >
-                Ã—
+                ×
               </button>
             </div>
             <p className="text-sm text-slate-600 mb-4">
-              ã”æ„è¦‹ã€ã”æ„Ÿæƒ³ã€ãã®ä»–ãŠå•ã„åˆã‚ã›ã¯ã€ä»¥ä¸‹ã®ãƒ¡ãƒ¼ãƒ«ã‚¢ãƒ‰ãƒ¬ã‚¹å®›ã«ãŠé¡˜ã„ã„ãŸã—ã¾ã™ã€‚
+              ご意見、ご感想、その他お問い合わせは、以下のメールアドレス宛にお願いいたします。
             </p>
             <a
-              href="mailto:ts@ai.aizu-tv.com?subject=AIè¨˜äº‹è¦ç´„.comã¸ã®ãŠå•ã„åˆã‚ã›"
+              href="mailto:ts@ai.aizu-tv.com?subject=AI記事要約.comへのお問い合わせ"
               className="block w-full text-center px-4 py-2.5 bg-blue-500 text-white text-base rounded-md font-medium hover:bg-blue-600 transition-colors"
               onClick={() => setShowContactModal(false)}
             >
-              ãƒ¡ãƒ¼ãƒ«ã§å•ã„åˆã‚ã›ã‚‹
+              メールで問い合わせる
             </a>
             <button
               onClick={() => setShowContactModal(false)}
               className="mt-3 block w-full text-center px-4 py-2.5 bg-slate-200 text-slate-700 text-base rounded-md font-medium hover:bg-slate-300 transition-colors"
             >
-              é–‰ã˜ã‚‹
+              閉じる
             </button>
           </div>
         </div>
