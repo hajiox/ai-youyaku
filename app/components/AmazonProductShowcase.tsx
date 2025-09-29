@@ -1,204 +1,92 @@
-import Image from "next/image";
-import { useMemo } from "react";
+// app/page.tsx ver.2
 
-type AmazonProduct = {
-  asin: string;
-  title: string;
-  url: string;
-  imageUrl?: string;
-  price?: string;
-  amount?: number;
-  currency?: string;
-  rating?: number;
-  reviewCount?: number;
-  matchedKeywords?: string[];
-};
+"use client";
 
-type AmazonProductShowcaseProps = {
-  keywords: string[];
-  products: AmazonProduct[];
-  isLoading: boolean;
-  error: string | null;
-};
+import { useState, useEffect } from "react";
+import { useSession, signIn, signOut } from "next-auth/react";
+import AmazonProductShowcase, {
+  AmazonProduct as AmazonProductType,
+} from "./components/AmazonProductShowcase";
+import ToneSampleModal from "./components/ToneSampleModal";
 
-const formatRating = (rating?: number) => {
-  if (!rating) return null;
-  return Math.round(rating * 10) / 10;
-};
+const FREE_USER_TONE_SAMPLE_MAX_LENGTH = 2000;
 
-const renderStars = (rating?: number) => {
-  if (!rating) return null;
-  const rounded = Math.round(rating * 2) / 2;
-  const fullStars = Math.floor(rounded);
-  const hasHalf = rounded - fullStars >= 0.5;
-  const emptyStars = 5 - fullStars - (hasHalf ? 1 : 0);
+export default function Home() {
+  const [url, setUrl] = useState("");
+  const [shortSummary, setShortSummary] = useState("");
+  const [longSummary, setLongSummary] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [processedInfo, setProcessedInfo] = useState<{truncated: boolean, originalLength: number, processedLength: number} | null>(null);
+  const [showContactModal, setShowContactModal] = useState(false);
 
-  return (
-    <span className="flex items-center gap-0.5 text-amber-500">
-      {Array.from({ length: fullStars }).map((_, idx) => (
-        <span key={`full-${idx}`}>★</span>
-      ))}
-      {hasHalf && <span className="text-amber-400">☆</span>}
-      {Array.from({ length: emptyStars }).map((_, idx) => (
-        <span key={`empty-${idx}`} className="text-slate-300">
-          ☆
-        </span>
-      ))}
-    </span>
+  const { data: session, status } = useSession();
+
+  const [showToneSampleModal, setShowToneSampleModal] = useState(false);
+  const [currentDbSample, setCurrentDbSample] = useState("");
+  const [isSavingToneSample, setIsSavingToneSample] = useState(false);
+  const [toneSampleError, setToneSampleError] = useState<string | null>(null);
+  const [toneSampleSuccessMessage, setToneSampleSuccessMessage] = useState<string | null>(null);
+  const [amazonKeywords, setAmazonKeywords] = useState<string[]>([]);
+  const [amazonProducts, setAmazonProducts] = useState<AmazonProductType[]>([]);
+  const [amazonProductsLoading, setAmazonProductsLoading] = useState(false);
+  const [amazonProductsError, setAmazonProductsError] = useState<string | null>(
+    null
   );
-};
 
-const AmazonProductShowcase = ({
-  keywords,
-  products,
-  isLoading,
-  error,
-}: AmazonProductShowcaseProps) => {
-  const displayKeywords = useMemo(() => keywords.slice(0, 5), [keywords]);
+  const extractKeywords = (text: string, max: number = 3): string[] => {
+    const tokens = text.match(/[\p{Script=Han}々]+|[ァ-ヶー]+|[a-zA-Z]+/gu) || [];
+    const freq: Record<string, number> = {};
+    tokens.forEach((t) => {
+      if (t.length < 2) return;
+      freq[t] = (freq[t] || 0) + 1;
+    });
+    return Object.entries(freq)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, max)
+      .map(([w]) => w);
+  };
 
-  const shouldRender = isLoading || error || products.length > 0 || keywords.length > 0;
+  const handleSummarize = async (
+    selectedTone: "casual" | "formal" | "custom"
+  ) => {
+    if (!url) {
+      alert("URLを入力してください");
+      return;
+    }
+    if (isLoading) return;
 
-  if (!shouldRender) {
-    return null;
-  }
+    if (selectedTone === "custom" && !currentDbSample) {
+      alert("自分の口調サンプルが登録されていません。");
+      return;
+    }
 
-  return (
-    <aside className="w-full rounded-2xl bg-gradient-to-br from-amber-50 via-white to-sky-50 p-6 shadow-sm ring-1 ring-amber-100/60">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">
-            おすすめアイテム
-          </p>
-          <h2 className="text-xl font-bold text-slate-700">
-            要約内容に合わせたAmazon商品
-          </h2>
-          <p className="mt-1 text-xs text-slate-500">
-            要約文から抽出したキーワードをもとに関連商品の候補をピックアップします。
-          </p>
-        </div>
-        {displayKeywords.length > 0 && (
-          <div className="hidden flex-wrap justify-end gap-1 text-xs text-amber-700 sm:flex">
-            {displayKeywords.map((keyword) => (
-              <span
-                key={keyword}
-                className="rounded-full bg-amber-100 px-3 py-1 font-medium"
-              >
-                #{keyword}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+    setIsLoading(true);
+    setError(null);
+    setShortSummary("");
+    setLongSummary("");
+    setProcessedInfo(null);
 
-      {isLoading && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {Array.from({ length: 4 }).map((_, idx) => (
-            <div
-              key={idx}
-              className="flex animate-pulse flex-col rounded-xl border border-white/70 bg-white/60 p-4 shadow-sm"
-            >
-              <div className="mb-3 aspect-square w-full rounded-lg bg-slate-200" />
-              <div className="mb-2 h-3 rounded bg-slate-200" />
-              <div className="mb-1 h-3 w-3/4 rounded bg-slate-100" />
-              <div className="h-3 w-1/2 rounded bg-slate-100" />
-            </div>
-          ))}
-        </div>
-      )}
+    try {
+      const requests = selectedTone === "custom"
+        ? [
+            fetch('/api/summary', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url, mode: 'short', tone: 'custom', toneSample: currentDbSample })
+            }),
+            fetch('/api/summary', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url, mode: 'long', tone: 'custom', toneSample: currentDbSample })
+            })
+          ]
+        : [
+            fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=short&tone=${selectedTone}`),
+            fetch(`/api/summary?url=${encodeURIComponent(url)}&mode=long&tone=${selectedTone}`)
+          ];
+      const [shortRes, longRes] = await Promise.all(requests);
 
-      {!isLoading && products.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-1">
-          {products.map((product) => (
-            <article
-              key={product.asin}
-              className="group flex h-full flex-col overflow-hidden rounded-xl border border-white/80 bg-white/80 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
-            >
-              <div className="relative h-48 w-full overflow-hidden bg-slate-100">
-                {product.imageUrl ? (
-                  <Image
-                    src={product.imageUrl}
-                    alt={product.title}
-                    fill
-                    className="object-contain p-3 transition duration-300 group-hover:scale-105"
-                    sizes="(max-width: 1024px) 50vw, 280px"
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-slate-400">
-                    画像なし
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-1 flex-col p-4">
-                <h3
-                  className="text-sm font-semibold leading-snug text-slate-700"
-                  style={{
-                    display: "-webkit-box",
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: "vertical",
-                    overflow: "hidden",
-                  }}
-                >
-                  {product.title || "商品名不明"}
-                </h3>
-
-                {product.price && (
-                  <p className="mt-2 text-lg font-bold text-rose-600">{product.price}</p>
-                )}
-
-                {(product.rating || product.reviewCount) && (
-                  <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-                    {renderStars(product.rating)}
-                    {product.rating && (
-                      <span className="font-semibold text-slate-600">
-                        {formatRating(product.rating)}
-                      </span>
-                    )}
-                    {typeof product.reviewCount === "number" && (
-                      <span>({product.reviewCount.toLocaleString()}件の評価)</span>
-                    )}
-                  </div>
-                )}
-
-                {product.matchedKeywords && product.matchedKeywords.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1 text-[11px] text-amber-700">
-                    {product.matchedKeywords.map((keyword) => (
-                      <span key={keyword} className="rounded-full bg-amber-100 px-2 py-0.5">
-                        #{keyword}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <div className="mt-auto pt-4">
-                  <a
-                    href={product.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-amber-600"
-                  >
-                    Amazonで見る
-                    <span aria-hidden>→</span>
-                  </a>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-
-      {!isLoading && products.length === 0 && !error && (
-        <div className="rounded-xl border border-dashed border-amber-200 bg-white/60 p-6 text-sm text-slate-500">
-          要約結果が表示されると、関連するAmazon商品をこちらに掲載します。
-        </div>
-      )}
-
-      {error && (
-        <p className="mt-4 text-sm font-medium text-rose-600">{error}</p>
-      )}
-    </aside>
-  );
-};
-
-export type { AmazonProduct };
-export default AmazonProductShowcase;
+      let shortError = null;
+      let longError = null;
+      let shortData:
