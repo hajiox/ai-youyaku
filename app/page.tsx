@@ -482,7 +482,7 @@ export default function Home() {
             <p className="text-sm text-slate-600 mb-4">
               ご意見、ご感想、その他お問い合わせは、以下のメールアドレス宛にお願いいたします。
             </p>
-            
+            <a
               href="mailto:ts@ai.aizu-tv.com?subject=AI記事要約.comへのお問い合わせ"
               className="block w-full text-center px-4 py-2.5 bg-blue-500 text-white text-base rounded-md font-medium hover:bg-blue-600 transition-colors"
               onClick={() => setShowContactModal(false)}
