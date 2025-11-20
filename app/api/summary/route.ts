@@ -1,10 +1,10 @@
-// /app/api/summary/route.ts ver.10
+// /app/api/summary/route.ts ver.11
 import { NextResponse } from "next/server";
 import { buildMessagesForGemini } from "@/lib/buildMessages";
 
 export const runtime = "edge";
 
-// 入力コンテンツの最大文字数（Yahooニュースなどは余計な文字も多いので少し増やす）
+// 入力コンテンツの最大文字数
 const MAX_INPUT_CHAR_LENGTH = 15000;
 
 /**
@@ -18,7 +18,7 @@ async function fetchUrlContent(url: string): Promise<{
   error?: string 
 }> {
   try {
-    // ユーザーエージェントとヘッダーを強化して、普通のPCブラウザに見せかける
+    // ユーザーエージェントとヘッダーを強化
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -52,12 +52,11 @@ async function fetchUrlContent(url: string): Promise<{
     if (contentType && contentType.includes("text/html")) {
       const html = await response.text();
       
-      // HTMLから本文抽出の精度を向上（正規表現で不要な部分を削ぎ落とす）
+      // HTMLから本文抽出
       plainText = html
         // スクリプトとスタイルを削除（最優先）
         .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gmi, ' ')
         .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gmi, ' ')
-        .replace(//g, ' ') // コメント削除
         // ナビゲーション、フッター、ヘッダー、広告枠などを大まかに削除
         .replace(/<nav\b[^>]*>[\s\S]*?<\/nav>/gmi, ' ')
         .replace(/<footer\b[^>]*>[\s\S]*?<\/footer>/gmi, ' ')
@@ -79,7 +78,6 @@ async function fetchUrlContent(url: string): Promise<{
     } else if (contentType && contentType.includes("text/plain")) {
       plainText = await response.text();
     } else {
-      // JSONなどが返ってきた場合もテキストとして扱う
       plainText = await response.text();
     }
 
@@ -87,7 +85,6 @@ async function fetchUrlContent(url: string): Promise<{
     let processedText = plainText;
     let truncated = false;
 
-    // テキスト化の結果、中身がスカスカだった場合
     if (originalLength < 50) {
       return { 
         content: null, 
