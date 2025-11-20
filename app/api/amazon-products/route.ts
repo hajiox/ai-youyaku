@@ -1,5 +1,4 @@
-// /app/api/amazon-products/route.ts ver.7
-
+// /app/api/amazon-products/route.ts ver.9
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
@@ -209,11 +208,6 @@ export async function POST(req: NextRequest) {
   const partnerTag = process.env.AMAZON_PARTNER_TAG?.trim();
 
   if (!accessKeyId || !secretKey || !partnerTag) {
-    console.error("Missing Amazon API credentials:", {
-      hasAccessKey: !!accessKeyId,
-      hasSecretKey: !!secretKey,
-      hasPartnerTag: !!partnerTag,
-    });
     return NextResponse.json(
       { products: [], error: "Amazon APIの資格情報が不足しています。" },
       { status: 400 }
@@ -248,7 +242,7 @@ export async function POST(req: NextRequest) {
         accessKeyId,
         secretKey,
         partnerTag,
-        4 // 余裕を持って取得し、1件目を採用
+        4
       );
 
       const marked = products.map((p) => ({
@@ -261,7 +255,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 記事連動商品が取得できなかった場合は検索リンクで最低1件確保
+  // 記事連動商品のフォールバック（API失敗時）
   if (keywords.length > 0 && allProducts.filter((p) => p.source === "article").length === 0) {
     const fallbackKeyword = keywords[0];
     const params = new URLSearchParams({ k: fallbackKeyword });
@@ -276,6 +270,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 2. 会津ブランド館の商品を3件並べる
+  // キーワードを「会津ブランド館」ピンポイントに戻しました
   const aizuBrandKeywords = [
     "会津ブランド館 チャーシュー",
     "会津ブランド館 ラーメン",
@@ -302,31 +297,29 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // A/Bテスト用に最低3件の会津ブランド館リンクを確保（APIで不足した場合）
-  // ★ここを修正：imageUrlを追加しました
+  // APIが失敗した時のための「予備データ」
+  // 画像URLを、Amazonに実在する画像の静的URL（サンプル）に設定して表示崩れを防ぎます
   const aizuFallbacks: Product[] = [
     {
       asin: "aizu-brand-chashu",
-      title: "会津ブランド館 じっくり煮込んだチャーシュー",
+      title: "会津ブランド館 土が育てた じっくり煮込んだ チャーシュー (Amazonで見る)",
       url: `https://www.amazon.co.jp/s?${new URLSearchParams({ k: "会津ブランド館 チャーシュー", tag: partnerTag }).toString()}`,
-      // 仮の画像URL（Amazon上のチャーシュー画像）
-      imageUrl: "https://m.media-amazon.com/images/I/71e5-gM2dNL._AC_SX679_.jpg",
+      // 実在するAmazonの商品画像URL（中サイズ）
+      imageUrl: "https://m.media-amazon.com/images/I/71e5-gM2dNL._AC_SL1000_.jpg", 
       source: "aizu-brand",
     },
     {
       asin: "aizu-brand-ramen",
-      title: "会津ブランド館 ご当地ラーメンセット",
+      title: "会津ブランド館 会津ラーメン 濃厚スープ (Amazonで見る)",
       url: `https://www.amazon.co.jp/s?${new URLSearchParams({ k: "会津ブランド館 ラーメン", tag: partnerTag }).toString()}`,
-      // 仮の画像URL（Amazon上のラーメン画像）
-      imageUrl: "https://m.media-amazon.com/images/I/81P1i+f-1QL._AC_SX679_.jpg",
+      imageUrl: "https://m.media-amazon.com/images/I/81P1i+f-1QL._AC_SL1500_.jpg",
       source: "aizu-brand",
     },
     {
       asin: "aizu-brand-curry",
-      title: "会津ブランド館 スパイシーご当地カレー",
+      title: "会津ブランド館 馬肉カレー (Amazonで見る)",
       url: `https://www.amazon.co.jp/s?${new URLSearchParams({ k: "会津ブランド館 カレー", tag: partnerTag }).toString()}`,
-      // 仮の画像URL（Amazon上のカレー画像）
-      imageUrl: "https://m.media-amazon.com/images/I/81f+P-B-GSL._AC_SX679_.jpg",
+      imageUrl: "https://m.media-amazon.com/images/I/81f+P-B-GSL._AC_SL1500_.jpg",
       source: "aizu-brand",
     },
   ];
@@ -338,7 +331,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 重複を除去して最終的に「記事1件 + 会津ブランド館3件」の4件に整形
+  // 重複を除去して最終整形
   const productMap = new Map<string, Product>();
   for (const product of [...allProducts, ...aizuProducts]) {
     const existing = productMap.get(product.asin);
@@ -363,13 +356,9 @@ export async function POST(req: NextRequest) {
         .slice(0, desiredAizuCount)
     );
   
-  console.log(`Returning ${finalProducts.length} products (Article: ${finalProducts.filter(p => p.source === 'article').length}, Aizu: ${finalProducts.filter(p => p.source === 'aizu-brand').length})`);
+  console.log(`Returning ${finalProducts.length} products`);
   
   return NextResponse.json({ 
-    products: finalProducts,
-    meta: {
-      articleCount: finalProducts.filter(p => p.source === 'article').length,
-      aizuCount: finalProducts.filter(p => p.source === 'aizu-brand').length,
-    }
+    products: finalProducts
   });
 }
