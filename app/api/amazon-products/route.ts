@@ -1,4 +1,4 @@
-// /app/api/amazon-products/route.ts ver.6
+// /app/api/amazon-products/route.ts ver.7
 
 export const runtime = "nodejs";
 
@@ -303,23 +303,30 @@ export async function POST(req: NextRequest) {
   }
 
   // A/Bテスト用に最低3件の会津ブランド館リンクを確保（APIで不足した場合）
+  // ★ここを修正：imageUrlを追加しました
   const aizuFallbacks: Product[] = [
     {
       asin: "aizu-brand-chashu",
       title: "会津ブランド館 じっくり煮込んだチャーシュー",
       url: `https://www.amazon.co.jp/s?${new URLSearchParams({ k: "会津ブランド館 チャーシュー", tag: partnerTag }).toString()}`,
+      // 仮の画像URL（Amazon上のチャーシュー画像）
+      imageUrl: "https://m.media-amazon.com/images/I/71e5-gM2dNL._AC_SX679_.jpg",
       source: "aizu-brand",
     },
     {
       asin: "aizu-brand-ramen",
       title: "会津ブランド館 ご当地ラーメンセット",
       url: `https://www.amazon.co.jp/s?${new URLSearchParams({ k: "会津ブランド館 ラーメン", tag: partnerTag }).toString()}`,
+      // 仮の画像URL（Amazon上のラーメン画像）
+      imageUrl: "https://m.media-amazon.com/images/I/81P1i+f-1QL._AC_SX679_.jpg",
       source: "aizu-brand",
     },
     {
       asin: "aizu-brand-curry",
       title: "会津ブランド館 スパイシーご当地カレー",
       url: `https://www.amazon.co.jp/s?${new URLSearchParams({ k: "会津ブランド館 カレー", tag: partnerTag }).toString()}`,
+      // 仮の画像URL（Amazon上のカレー画像）
+      imageUrl: "https://m.media-amazon.com/images/I/81f+P-B-GSL._AC_SX679_.jpg",
       source: "aizu-brand",
     },
   ];
