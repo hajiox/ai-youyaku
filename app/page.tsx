@@ -1,4 +1,4 @@
-// /app/page.tsx ver.6
+// /app/page.tsx ver.7
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -78,25 +78,64 @@ export default function Home() {
     }
   };
 
-  // 要約からキーワードを抽出する関数
+  // 【修正版】要約からキーワードを抽出する関数（話し言葉を除外して精度向上）
   const extractKeywords = (text: string): string[] => {
-    // テキストが空またはundefinedの場合は空配列を返す（エラー回避）
     if (!text) return [];
 
-    const keywords: string[] = [];
+    // 1. 除外したい話し言葉リスト
+    const ignoreList = [
+      'ねぇねぇ', 'なんか', 'すごい', 'これ', 'それ', 'あれ', 'どれ',
+      '今日の', 'ニュース', '知ってる', 'あのね', '実は', 'なんと',
+      'どう', '思う', 'ます', 'です', 'でした', 'ました', 'から', 'ので',
+      'という', 'こと', 'もの', 'さん', 'くん', 'ちゃん', 'みたい', '感じ',
+      '記事', '筆者', '概要', 'ポイント', 'まとめ'
+    ];
+
+    const candidates: string[] = [];
     
-    // 句読点で分割して単語を抽出
-    const words = text.split(/[、。\s]+/).filter(w => w.length >= 2 && w.length <= 10);
-    
-    // 最初の3つの名詞的な単語を抽出
-    for (const word of words) {
-      if (keywords.length >= 3) break;
-      if (word && !keywords.includes(word)) {
-        keywords.push(word);
+    // 2. カタカナ用語（2文字以上）を抽出（エヌビディア、AI、半導体などを狙う）
+    // カタカナ、または「漢字+カタカナ」「アルファベット」の組み合わせ
+    const katakanaRegex = /[ァ-ヶーA-Za-z0-9\u4E00-\u9FFF]{2,}/g;
+    const matches = text.match(katakanaRegex);
+
+    if (matches) {
+      for (const word of matches) {
+        // クリーニング
+        const cleanWord = word.trim();
+        
+        // 3. フィルタリング条件
+        // - 除外リストに含まれていない
+        // - ひらがなのみでない（正規表現で抽出しているので自動的に除外されるが念のため）
+        // - 数字だけのものは除外（2000とか）
+        // - 10文字以内
+        if (
+          cleanWord.length >= 2 && 
+          cleanWord.length <= 15 &&
+          !ignoreList.includes(cleanWord) &&
+          !/^\d+$/.test(cleanWord) // 数字だけは除外
+        ) {
+          // 重複チェック
+          if (!candidates.includes(cleanWord)) {
+            candidates.push(cleanWord);
+          }
+        }
       }
     }
     
-    return keywords;
+    // 4. 漢字のみの熟語も補足（2文字以上）
+    const kanjiRegex = /[\u4E00-\u9FFF]{2,}/g;
+    const kanjiMatches = text.match(kanjiRegex);
+    if (kanjiMatches) {
+      for (const word of kanjiMatches) {
+        if (!candidates.includes(word) && !ignoreList.includes(word)) {
+           candidates.push(word);
+        }
+      }
+    }
+
+    // 優先順位: 長い単語やカタカナを優先しつつ、最大3つ返す
+    // ここではシンプルに見つかった順の上位3つを返す（要約の前半に重要語がある傾向が強いため）
+    return candidates.slice(0, 3);
   };
 
   // Amazon商品を取得する関数
@@ -157,18 +196,16 @@ export default function Home() {
       const shortData = await shortResponse.json();
 
       if (!shortResponse.ok) {
-        // APIがエラーメッセージを返している場合はそれを表示
         throw new Error(shortData.error || '要約の生成に失敗しました');
       }
 
-      // summaryが存在するか確認
       if (!shortData.summary) {
         throw new Error('要約データが空でした。別の記事でお試しください。');
       }
 
       setSummary(shortData.summary);
 
-      // 短い要約からキーワードを抽出（安全に呼び出し）
+      // ★ここで改良版キーワード抽出を実行
       const keywords = extractKeywords(shortData.summary);
       setAmazonKeywords(keywords);
 
