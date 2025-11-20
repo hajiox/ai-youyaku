@@ -1,4 +1,4 @@
-// /app/page.tsx ver.4
+// /app/page.tsx ver.5
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -145,7 +145,7 @@ export default function Home() {
         body: JSON.stringify({ 
           url, 
           tone, 
-          summaryLength: 'short',
+          mode: 'short',
           toneSample: tone === 'custom' ? toneSample : undefined
         })
       });
@@ -167,7 +167,7 @@ export default function Home() {
         body: JSON.stringify({ 
           url, 
           tone, 
-          summaryLength: 'detailed',
+          mode: 'long',
           toneSample: tone === 'custom' ? toneSample : undefined
         })
       });
