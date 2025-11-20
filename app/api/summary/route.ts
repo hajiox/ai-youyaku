@@ -1,4 +1,4 @@
-// /app/api/summary/route.ts ver.9
+// /app/api/summary/route.ts ver.10
 import { NextResponse } from "next/server";
 import { buildMessagesForGemini } from "@/lib/buildMessages";
 
@@ -19,7 +19,6 @@ async function fetchUrlContent(url: string): Promise<{
 }> {
   try {
     // ユーザーエージェントとヘッダーを強化して、普通のPCブラウザに見せかける
-    // これがないと「AI出禁」サイトやセキュリティの高いニュースサイトで弾かれます
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -37,7 +36,6 @@ async function fetchUrlContent(url: string): Promise<{
 
     if (!response.ok) {
       console.error(`URLの取得に失敗: ${url}, ステータス: ${response.status}`);
-      // 403 Forbiddenなどはアクセス拒否
       return { 
         content: null, 
         truncated: false, 
@@ -67,7 +65,7 @@ async function fetchUrlContent(url: string): Promise<{
         .replace(/<aside\b[^>]*>[\s\S]*?<\/aside>/gmi, ' ')
         // タグを削除してテキストのみにする
         .replace(/<[^>]+>/g, ' ')
-        // HTMLエンティティのデコード（文字化け防止）
+        // HTMLエンティティのデコード
         .replace(/&nbsp;/g, ' ')
         .replace(/&amp;/g, '&')
         .replace(/&lt;/g, '<')
@@ -221,7 +219,7 @@ export async function GET(req: Request) {
     const summaryText = await callGeminiAPI(prompt);
     
     return NextResponse.json({ 
-      summary: summaryText, // 修正点：ここを 'result' から 'summary' に変更してフロントエンドと合わせる
+      summary: summaryText,
       truncated: fetchResult.truncated,
       originalLength: fetchResult.originalLength
     });
@@ -263,7 +261,7 @@ export async function POST(req: Request) {
     const summaryText = await callGeminiAPI(prompt);
     
     return NextResponse.json({ 
-      summary: summaryText, // 修正点：ここを 'result' から 'summary' に変更
+      summary: summaryText,
       truncated: fetchResult.truncated,
       originalLength: fetchResult.originalLength
     });
