@@ -235,91 +235,109 @@ export async function POST(req: NextRequest) {
     .slice(0, 5);
 
   const allProducts: Product[] = [];
+  const desiredArticleCount = 1;
+  const desiredAizuCount = 3;
 
-  // 1. 記事連動商品の取得（最大3個）
+  // 1. 記事連動商品の取得（1個確保）
   if (keywords.length > 0) {
-    // 各キーワードで商品を検索（最大3個取得するまで）
     for (const keyword of keywords) {
-      if (allProducts.length >= 3) break;
-      
+      if (allProducts.filter((p) => p.source === "article").length >= desiredArticleCount) break;
+
       const products = await searchAmazonProducts(
         keyword,
         accessKeyId,
         secretKey,
         partnerTag,
-        3 // 各キーワードで最大3個
+        4 // 余裕を持って取得し、1件目を採用
       );
-      
-      // 記事連動商品としてマーク
-      products.forEach(p => {
-        p.source = 'article';
-        p.matchedKeywords = [keyword];
-      });
-      
-      allProducts.push(...products);
-      
-      if (allProducts.length >= 3) {
-        // 3個に制限
-        allProducts.splice(3);
-        break;
-      }
+
+      const marked = products.map((p) => ({
+        ...p,
+        source: "article" as const,
+        matchedKeywords: [keyword],
+      }));
+
+      allProducts.push(...marked.slice(0, desiredArticleCount - allProducts.filter((p) => p.source === "article").length));
     }
   }
-  
-  // 2. 会津ブランド館の商品を追加（4個目以降）
+
+  // 記事連動商品が取得できなかった場合は検索リンクで最低1件確保
+  if (keywords.length > 0 && allProducts.filter((p) => p.source === "article").length === 0) {
+    const fallbackKeyword = keywords[0];
+    const params = new URLSearchParams({ k: fallbackKeyword });
+    params.set("tag", partnerTag);
+    allProducts.push({
+      asin: `search-${fallbackKeyword}`,
+      title: `「${fallbackKeyword}」関連商品をAmazonで探す`,
+      url: `https://www.amazon.co.jp/s?${params.toString()}`,
+      source: "article",
+      matchedKeywords: [fallbackKeyword],
+    });
+  }
+
+  // 2. 会津ブランド館の商品を3件並べる
   const aizuBrandKeywords = [
     "会津ブランド館 チャーシュー",
     "会津ブランド館 ラーメン",
-    "会津ブランド館 カレー"
+    "会津ブランド館 カレー",
   ];
-  
-  // 必要な商品数（最大12個 - 既存の記事連動商品数）
-  const neededAizuProducts = Math.max(0, 12 - allProducts.length);
-  
-  if (neededAizuProducts > 0) {
-    const aizuProducts: Product[] = [];
-    
-    // 会津ブランド館関連のキーワードで検索
-    for (const aizuKeyword of aizuBrandKeywords) {
-      if (aizuProducts.length >= neededAizuProducts) break;
-      
-      const products = await searchAmazonProducts(
-        aizuKeyword,
-        accessKeyId,
-        secretKey,
-        partnerTag,
-        6
-      );
-      
-      // 会津ブランド商品としてマーク
-      products.forEach(p => {
-        p.source = 'aizu-brand';
-      });
-      
-      aizuProducts.push(...products);
-    }
-    
-    // 重複を除去
-    const aizuProductMap = new Map<string, Product>();
-    for (const product of aizuProducts) {
-      if (!aizuProductMap.has(product.asin)) {
-        aizuProductMap.set(product.asin, product);
+
+  const aizuProducts: Product[] = [];
+
+  for (const aizuKeyword of aizuBrandKeywords) {
+    if (aizuProducts.length >= desiredAizuCount) break;
+
+    const products = await searchAmazonProducts(
+      aizuKeyword,
+      accessKeyId,
+      secretKey,
+      partnerTag,
+      4
+    );
+
+    products.forEach((p) => {
+      if (aizuProducts.length < desiredAizuCount) {
+        aizuProducts.push({ ...p, source: "aizu-brand" });
       }
-    }
-    
-    // 必要な数だけ追加
-    const uniqueAizuProducts = Array.from(aizuProductMap.values());
-    allProducts.push(...uniqueAizuProducts.slice(0, neededAizuProducts));
+    });
   }
-  
-  // 重複商品のマージ（記事連動商品内での重複処理）
+
+  // A/Bテスト用に最低3件の会津ブランド館リンクを確保（APIで不足した場合）
+  const aizuFallbacks: Product[] = [
+    {
+      asin: "aizu-brand-chashu",
+      title: "会津ブランド館 じっくり煮込んだチャーシュー",
+      url: `https://www.amazon.co.jp/s?${new URLSearchParams({ k: "会津ブランド館 チャーシュー", tag: partnerTag }).toString()}`,
+      source: "aizu-brand",
+    },
+    {
+      asin: "aizu-brand-ramen",
+      title: "会津ブランド館 ご当地ラーメンセット",
+      url: `https://www.amazon.co.jp/s?${new URLSearchParams({ k: "会津ブランド館 ラーメン", tag: partnerTag }).toString()}`,
+      source: "aizu-brand",
+    },
+    {
+      asin: "aizu-brand-curry",
+      title: "会津ブランド館 スパイシーご当地カレー",
+      url: `https://www.amazon.co.jp/s?${new URLSearchParams({ k: "会津ブランド館 カレー", tag: partnerTag }).toString()}`,
+      source: "aizu-brand",
+    },
+  ];
+
+  while (aizuProducts.length < desiredAizuCount && aizuFallbacks.length > 0) {
+    const nextFallback = aizuFallbacks.shift();
+    if (nextFallback) {
+      aizuProducts.push(nextFallback);
+    }
+  }
+
+  // 重複を除去して最終的に「記事1件 + 会津ブランド館3件」の4件に整形
   const productMap = new Map<string, Product>();
-  for (const product of allProducts) {
+  for (const product of [...allProducts, ...aizuProducts]) {
     const existing = productMap.get(product.asin);
     if (!existing) {
       productMap.set(product.asin, product);
-    } else if (existing.source === 'article' && product.source === 'article') {
-      // 記事連動商品同士の重複の場合、キーワードをマージ
+    } else if (existing.source === "article" && product.source === "article") {
       productMap.set(product.asin, {
         ...existing,
         matchedKeywords: Array.from(
@@ -328,8 +346,15 @@ export async function POST(req: NextRequest) {
       });
     }
   }
-  
-  const finalProducts = Array.from(productMap.values()).slice(0, 12);
+
+  const finalProducts = Array.from(productMap.values())
+    .filter((p) => p.source === "article")
+    .slice(0, desiredArticleCount)
+    .concat(
+      Array.from(productMap.values())
+        .filter((p) => p.source === "aizu-brand")
+        .slice(0, desiredAizuCount)
+    );
   
   console.log(`Returning ${finalProducts.length} products (Article: ${finalProducts.filter(p => p.source === 'article').length}, Aizu: ${finalProducts.filter(p => p.source === 'aizu-brand').length})`);
   
