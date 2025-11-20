@@ -1,4 +1,4 @@
-// /app/api/amazon-products/route.ts ver.9
+// /app/api/amazon-products/route.ts ver.10
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
@@ -101,7 +101,7 @@ async function searchAmazonProducts(
     const requestPayload = JSON.stringify(requestBody);
     const payloadHash = hash(requestPayload);
 
-    // Canonical Headersの作成（アルファベット順）
+    // Canonical Headersの作成
     const canonicalHeaders = 
       `content-encoding:${CONTENT_ENCODING}\n` +
       `content-type:application/json; charset=utf-8\n` +
@@ -174,7 +174,6 @@ async function searchAmazonProducts(
       return products;
     }
 
-    // 商品データの抽出
     const items = data?.SearchResult?.Items || [];
     
     for (const item of items) {
@@ -202,7 +201,6 @@ async function searchAmazonProducts(
 }
 
 export async function POST(req: NextRequest) {
-  // 環境変数の取得と検証
   const accessKeyId = process.env.AMAZON_ACCESS_KEY_ID?.trim();
   const secretKey = process.env.AMAZON_SECRET_ACCESS_KEY?.trim();
   const partnerTag = process.env.AMAZON_PARTNER_TAG?.trim();
@@ -214,7 +212,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // リクエストボディの解析
   let payload: { keywords?: string[] } = {};
   try {
     payload = await req.json();
@@ -232,7 +229,7 @@ export async function POST(req: NextRequest) {
   const desiredArticleCount = 1;
   const desiredAizuCount = 3;
 
-  // 1. 記事連動商品の取得（1個確保）
+  // 1. 記事連動商品の取得
   if (keywords.length > 0) {
     for (const keyword of keywords) {
       if (allProducts.filter((p) => p.source === "article").length >= desiredArticleCount) break;
@@ -255,7 +252,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 記事連動商品のフォールバック（API失敗時）
+  // 記事連動商品のフォールバック
   if (keywords.length > 0 && allProducts.filter((p) => p.source === "article").length === 0) {
     const fallbackKeyword = keywords[0];
     const params = new URLSearchParams({ k: fallbackKeyword });
@@ -269,8 +266,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // 2. 会津ブランド館の商品を3件並べる
-  // キーワードを「会津ブランド館」ピンポイントに戻しました
+  // 2. 会津ブランド商品の取得
   const aizuBrandKeywords = [
     "会津ブランド館 チャーシュー",
     "会津ブランド館 ラーメン",
@@ -297,29 +293,25 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // APIが失敗した時のための「予備データ」
-  // 画像URLを、Amazonに実在する画像の静的URL（サンプル）に設定して表示崩れを防ぎます
+  // フォールバックデータ（API失敗時の保険）
+  // 重要な変更：不確実な外部画像URLは削除し、フロントエンドのNo Image処理に委ねる
   const aizuFallbacks: Product[] = [
     {
       asin: "aizu-brand-chashu",
       title: "会津ブランド館 土が育てた じっくり煮込んだ チャーシュー (Amazonで見る)",
       url: `https://www.amazon.co.jp/s?${new URLSearchParams({ k: "会津ブランド館 チャーシュー", tag: partnerTag }).toString()}`,
-      // 実在するAmazonの商品画像URL（中サイズ）
-      imageUrl: "https://m.media-amazon.com/images/I/71e5-gM2dNL._AC_SL1000_.jpg", 
       source: "aizu-brand",
     },
     {
       asin: "aizu-brand-ramen",
       title: "会津ブランド館 会津ラーメン 濃厚スープ (Amazonで見る)",
       url: `https://www.amazon.co.jp/s?${new URLSearchParams({ k: "会津ブランド館 ラーメン", tag: partnerTag }).toString()}`,
-      imageUrl: "https://m.media-amazon.com/images/I/81P1i+f-1QL._AC_SL1500_.jpg",
       source: "aizu-brand",
     },
     {
       asin: "aizu-brand-curry",
       title: "会津ブランド館 馬肉カレー (Amazonで見る)",
       url: `https://www.amazon.co.jp/s?${new URLSearchParams({ k: "会津ブランド館 カレー", tag: partnerTag }).toString()}`,
-      imageUrl: "https://m.media-amazon.com/images/I/81f+P-B-GSL._AC_SL1500_.jpg",
       source: "aizu-brand",
     },
   ];
@@ -331,7 +323,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 重複を除去して最終整形
   const productMap = new Map<string, Product>();
   for (const product of [...allProducts, ...aizuProducts]) {
     const existing = productMap.get(product.asin);
