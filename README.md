@@ -28,6 +28,7 @@ OPENAI_API_KEY=your-openai-api-key
 AMAZON_ACCESS_KEY_ID=your-amazon-access-key
 AMAZON_SECRET_ACCESS_KEY=your-amazon-secret-key
 AMAZON_PARTNER_TAG=your-partner-tag-22
+NEXT_PUBLIC_AMAZON_PARTNER_TAG=your-partner-tag-22
 # Optional overrides (defaults target Amazon.co.jp)
 # AMAZON_API_REGION=us-west-2
 # AMAZON_API_HOST=webservices.amazon.co.jp

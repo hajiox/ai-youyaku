@@ -10,6 +10,7 @@ import AmazonProductShowcase, {
 import ToneSampleModal from "./components/ToneSampleModal";
 
 const FREE_USER_TONE_SAMPLE_MAX_LENGTH = 2000;
+const AMAZON_PARTNER_TAG = process.env.NEXT_PUBLIC_AMAZON_PARTNER_TAG || '';
 
 export default function Home() {
   const [url, setUrl] = useState("");
@@ -448,6 +449,7 @@ export default function Home() {
             products={amazonProducts}
             isLoading={amazonProductsLoading}
             error={amazonProductsError}
+            partnerTag={AMAZON_PARTNER_TAG}
           />
         </div>
 
