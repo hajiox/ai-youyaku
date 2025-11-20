@@ -1,4 +1,4 @@
-// /app/page.tsx ver.5
+// /app/page.tsx ver.6
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -24,6 +24,7 @@ export default function Home() {
   const { data: session } = useSession();
   const [url, setUrl] = useState('');
   const [tone, setTone] = useState<'casual' | 'formal' | 'custom'>('casual');
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [summaryLength, setSummaryLength] = useState<'short' | 'detailed'>('short');
   const [summary, setSummary] = useState('');
   const [detailedSummary, setDetailedSummary] = useState('');
@@ -79,6 +80,9 @@ export default function Home() {
 
   // 要約からキーワードを抽出する関数
   const extractKeywords = (text: string): string[] => {
+    // テキストが空またはundefinedの場合は空配列を返す（エラー回避）
+    if (!text) return [];
+
     const keywords: string[] = [];
     
     // 句読点で分割して単語を抽出
@@ -150,17 +154,25 @@ export default function Home() {
         })
       });
 
+      const shortData = await shortResponse.json();
+
       if (!shortResponse.ok) {
-        throw new Error('要約の生成に失敗しました');
+        // APIがエラーメッセージを返している場合はそれを表示
+        throw new Error(shortData.error || '要約の生成に失敗しました');
       }
 
-      const shortData = await shortResponse.json();
+      // summaryが存在するか確認
+      if (!shortData.summary) {
+        throw new Error('要約データが空でした。別の記事でお試しください。');
+      }
+
       setSummary(shortData.summary);
 
-      // 短い要約からキーワードを抽出
+      // 短い要約からキーワードを抽出（安全に呼び出し）
       const keywords = extractKeywords(shortData.summary);
       setAmazonKeywords(keywords);
 
+      // 詳細要約の取得
       const detailedResponse = await fetch('/api/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -174,7 +186,9 @@ export default function Home() {
 
       if (detailedResponse.ok) {
         const detailedData = await detailedResponse.json();
-        setDetailedSummary(detailedData.summary);
+        if (detailedData.summary) {
+          setDetailedSummary(detailedData.summary);
+        }
       }
 
       // Amazon商品を取得
@@ -184,6 +198,7 @@ export default function Home() {
 
     } catch (err) {
       setError(err instanceof Error ? err.message : '要約の生成に失敗しました');
+      console.error(err);
     } finally {
       setLoading(false);
     }
