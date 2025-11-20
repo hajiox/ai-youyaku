@@ -19,6 +19,7 @@ type AmazonProductShowcaseProps = {
   products: AmazonProduct[];
   isLoading: boolean;
   error: string | null;
+  partnerTag?: string;
 };
 
 const formatRating = (rating?: number) => {
@@ -53,8 +54,22 @@ const AmazonProductShowcase = ({
   products,
   isLoading,
   error,
+  partnerTag,
 }: AmazonProductShowcaseProps) => {
   const displayKeywords = useMemo(() => keywords.slice(0, 5), [keywords]);
+  const fallbackSearches = useMemo(() => {
+    if (displayKeywords.length === 0) return [];
+    return displayKeywords.slice(0, 3).map((keyword) => {
+      const params = new URLSearchParams({ k: keyword });
+      if (partnerTag) {
+        params.set("tag", partnerTag);
+      }
+      return {
+        keyword,
+        url: `https://www.amazon.co.jp/s?${params.toString()}`,
+      };
+    });
+  }, [displayKeywords, partnerTag]);
 
   const shouldRender = isLoading || error || products.length > 0 || keywords.length > 0;
 
@@ -187,9 +202,36 @@ const AmazonProductShowcase = ({
         </div>
       )}
 
-      {!isLoading && products.length === 0 && !error && (
+      {!isLoading && products.length === 0 && keywords.length === 0 && !error && (
         <div className="rounded-xl border border-dashed border-amber-200 bg-white/60 p-6 text-sm text-slate-500">
           要約結果が表示されると、関連するAmazon商品をこちらに掲載します。
+        </div>
+      )}
+
+      {!isLoading && products.length === 0 && keywords.length > 0 && (
+        <div className="mt-4 space-y-4 rounded-xl border border-amber-100 bg-white/70 p-5 text-sm text-slate-600">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">
+              Amazon検索リンク
+            </p>
+            <p className="mt-1 text-sm">
+              商品情報の取得に時間がかかる場合でも、以下のキーワードからすぐにAmazonの商品検索ページへ移動できます。
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {fallbackSearches.map((item) => (
+              <a
+                key={item.keyword}
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-col justify-between rounded-lg border border-amber-200 bg-gradient-to-br from-white to-amber-50 px-4 py-3 text-sm font-semibold text-amber-700 shadow-sm transition hover:border-amber-300 hover:shadow-md"
+              >
+                <span>「{item.keyword}」をAmazonで検索</span>
+                <span className="mt-2 text-xs font-medium text-amber-500">新しいタブで開きます →</span>
+              </a>
+            ))}
+          </div>
         </div>
       )}
 
