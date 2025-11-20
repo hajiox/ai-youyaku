@@ -1,4 +1,4 @@
-// /app/page.tsx ver.7
+// /app/page.tsx ver.9
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -78,67 +78,51 @@ export default function Home() {
     }
   };
 
-  // 【修正版】要約からキーワードを抽出する関数（話し言葉を除外して精度向上）
+  // 要約からキーワードを抽出する関数
   const extractKeywords = (text: string): string[] => {
     if (!text) return [];
 
-    // 1. 除外したい話し言葉リスト
     const ignoreList = [
       'ねぇねぇ', 'なんか', 'すごい', 'これ', 'それ', 'あれ', 'どれ',
       '今日の', 'ニュース', '知ってる', 'あのね', '実は', 'なんと',
       'どう', '思う', 'ます', 'です', 'でした', 'ました', 'から', 'ので',
       'という', 'こと', 'もの', 'さん', 'くん', 'ちゃん', 'みたい', '感じ',
-      '記事', '筆者', '概要', 'ポイント', 'まとめ'
+      '記事', '筆者', '概要', 'ポイント', 'まとめ',
+      '本日', '今日', '昨日', '明日', '現在', '今回', '今後', '過去', '時点',
+      '日本', '世界', '国内', '海外', '米国', '中国', '欧州', 
+      '市場', '株式', '株価', '指数', '平均', '全体', '影響',
+      '背景', '要因', '結果', '発表', '展開', '見通し', '状況', '状態',
+      '上昇', '下落', '回復', '更新', '推移', '最高', '最低', '記録',
+      '以上', '以下', '未満', '程度', '約', '円', 'ドル',
+      '関連', '銘柄', '中心', '堅調', '好調', '不調', '需要'
     ];
 
     const candidates: string[] = [];
-    
-    // 2. カタカナ用語（2文字以上）を抽出（エヌビディア、AI、半導体などを狙う）
-    // カタカナ、または「漢字+カタカナ」「アルファベット」の組み合わせ
-    const katakanaRegex = /[ァ-ヶーA-Za-z0-9\u4E00-\u9FFF]{2,}/g;
-    const matches = text.match(katakanaRegex);
+    const isValid = (w: string) => {
+      const clean = w.trim();
+      if (clean.length < 2 || clean.length > 20) return false;
+      if (ignoreList.includes(clean)) return false;
+      if (/^[\d０-９]/.test(clean)) return false;
+      if (/^(月|火|水|木|金|土|日)曜日?$/.test(clean)) return false;
+      return true;
+    };
 
-    if (matches) {
-      for (const word of matches) {
-        // クリーニング
-        const cleanWord = word.trim();
-        
-        // 3. フィルタリング条件
-        // - 除外リストに含まれていない
-        // - ひらがなのみでない（正規表現で抽出しているので自動的に除外されるが念のため）
-        // - 数字だけのものは除外（2000とか）
-        // - 10文字以内
-        if (
-          cleanWord.length >= 2 && 
-          cleanWord.length <= 15 &&
-          !ignoreList.includes(cleanWord) &&
-          !/^\d+$/.test(cleanWord) // 数字だけは除外
-        ) {
-          // 重複チェック
-          if (!candidates.includes(cleanWord)) {
-            candidates.push(cleanWord);
-          }
-        }
-      }
+    const katakanaMatches = text.match(/[ァ-ヶー]{2,}/g) || [];
+    for (const w of katakanaMatches) {
+      if (isValid(w) && !candidates.includes(w)) candidates.push(w);
     }
-    
-    // 4. 漢字のみの熟語も補足（2文字以上）
-    const kanjiRegex = /[\u4E00-\u9FFF]{2,}/g;
-    const kanjiMatches = text.match(kanjiRegex);
-    if (kanjiMatches) {
-      for (const word of kanjiMatches) {
-        if (!candidates.includes(word) && !ignoreList.includes(word)) {
-           candidates.push(word);
-        }
-      }
+    const engMatches = text.match(/[A-Za-z]{2,}/g) || [];
+    for (const w of engMatches) {
+      if (isValid(w) && !candidates.includes(w)) candidates.push(w);
     }
-
-    // 優先順位: 長い単語やカタカナを優先しつつ、最大3つ返す
-    // ここではシンプルに見つかった順の上位3つを返す（要約の前半に重要語がある傾向が強いため）
+    const kanjiMatches = text.match(/[一-龠]{2,}/g) || [];
+    for (const w of kanjiMatches) {
+      if (isValid(w) && !candidates.includes(w)) candidates.push(w);
+    }
     return candidates.slice(0, 3);
   };
 
-  // Amazon商品を取得する関数
+  // Amazon商品を取得する関数（デバッグ情報表示対応）
   const fetchAmazonProducts = async (keywords: string[]) => {
     if (keywords.length === 0) return;
     
@@ -155,6 +139,12 @@ export default function Home() {
       if (response.ok) {
         const data = await response.json();
         setAmazonProducts(data.products || []);
+        
+        // ★APIからデバッグエラーが返ってきていたら表示する
+        if (data.debugError) {
+          console.error('Amazon API Debug Error:', data.debugError);
+          setAmazonError(`【開発者用ログ】Amazon APIエラー: ${data.debugError}`);
+        }
       } else {
         setAmazonError('Amazon商品の取得に失敗しました');
         setAmazonProducts([]);
@@ -198,18 +188,15 @@ export default function Home() {
       if (!shortResponse.ok) {
         throw new Error(shortData.error || '要約の生成に失敗しました');
       }
-
       if (!shortData.summary) {
         throw new Error('要約データが空でした。別の記事でお試しください。');
       }
 
       setSummary(shortData.summary);
 
-      // ★ここで改良版キーワード抽出を実行
       const keywords = extractKeywords(shortData.summary);
       setAmazonKeywords(keywords);
 
-      // 詳細要約の取得
       const detailedResponse = await fetch('/api/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -228,7 +215,6 @@ export default function Home() {
         }
       }
 
-      // Amazon商品を取得
       if (keywords.length > 0) {
         await fetchAmazonProducts(keywords);
       }
@@ -305,9 +291,7 @@ export default function Home() {
               <button
                 onClick={() => setTone('casual')}
                 className={`flex-1 py-3 rounded-md font-medium transition-colors ${
-                  tone === 'casual'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  tone === 'casual' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
                 カジュアル
@@ -315,9 +299,7 @@ export default function Home() {
               <button
                 onClick={() => setTone('formal')}
                 className={`flex-1 py-3 rounded-md font-medium transition-colors ${
-                  tone === 'formal'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  tone === 'formal' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
                 フォーマル
@@ -328,13 +310,10 @@ export default function Home() {
               <button
                 onClick={() => setTone('custom')}
                 className={`w-full py-3 rounded-md font-medium transition-colors mb-4 ${
-                  tone === 'custom'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  tone === 'custom' ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
-                カスタム口調
-                {toneSample && ' (設定済み)'}
+                カスタム口調{toneSample && ' (設定済み)'}
               </button>
             )}
 
