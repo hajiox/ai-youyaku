@@ -1,4 +1,4 @@
-// /app/page.tsx ver.9
+// /app/page.tsx ver.10
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -102,7 +102,7 @@ export default function Home() {
       const clean = w.trim();
       if (clean.length < 2 || clean.length > 20) return false;
       if (ignoreList.includes(clean)) return false;
-      if (/^[\d０-９]/.test(clean)) return false;
+      if (/^[\d০-৯]/.test(clean)) return false;
       if (/^(月|火|水|木|金|土|日)曜日?$/.test(clean)) return false;
       return true;
     };
@@ -158,7 +158,9 @@ export default function Home() {
     }
   };
 
-  const handleSummarize = async () => {
+  const handleSummarize = async (selectedTone?: 'casual' | 'formal' | 'custom') => {
+    const currentTone = selectedTone || tone;
+
     if (!url.trim()) {
       setError('URLを入力してください');
       return;
@@ -177,9 +179,9 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           url, 
-          tone, 
+          tone: currentTone, 
           mode: 'short',
-          toneSample: tone === 'custom' ? toneSample : undefined
+          toneSample: currentTone === 'custom' ? toneSample : undefined
         })
       });
 
@@ -202,9 +204,9 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           url, 
-          tone, 
+          tone: currentTone, 
           mode: 'long',
-          toneSample: tone === 'custom' ? toneSample : undefined
+          toneSample: currentTone === 'custom' ? toneSample : undefined
         })
       });
 
@@ -225,6 +227,11 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleToneButtonClick = (selectedTone: 'casual' | 'formal') => {
+    setTone(selectedTone);
+    handleSummarize(selectedTone);
   };
 
   const handleReset = () => {
@@ -289,49 +296,50 @@ export default function Home() {
 
             <div className="flex gap-4 mb-4">
               <button
-                onClick={() => setTone('casual')}
-                className={`flex-1 py-3 rounded-md font-medium transition-colors ${
-                  tone === 'casual' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
+                onClick={() => handleToneButtonClick('casual')}
+                disabled={loading}
+                className="flex-1 py-3 rounded-md font-medium transition-colors bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
-                カジュアル
+                {loading && tone === 'casual' ? '要約中...' : 'カジュアルで要約'}
               </button>
               <button
-                onClick={() => setTone('formal')}
-                className={`flex-1 py-3 rounded-md font-medium transition-colors ${
-                  tone === 'formal' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
+                onClick={() => handleToneButtonClick('formal')}
+                disabled={loading}
+                className="flex-1 py-3 rounded-md font-medium transition-colors bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
-                フォーマル
+                {loading && tone === 'formal' ? '要約中...' : 'フォーマルで要約'}
               </button>
             </div>
 
             {session && (
-              <button
-                onClick={() => setTone('custom')}
-                className={`w-full py-3 rounded-md font-medium transition-colors mb-4 ${
-                  tone === 'custom' ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                カスタム口調{toneSample && ' (設定済み)'}
-              </button>
+              <>
+                <button
+                  onClick={() => setTone('custom')}
+                  className={`w-full py-3 rounded-md font-medium transition-colors mb-4 ${
+                    tone === 'custom' ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  カスタム口調{toneSample && ' (設定済み)'}
+                </button>
+
+                {tone === 'custom' && (
+                  <button
+                    onClick={() => handleSummarize()}
+                    disabled={loading}
+                    className="w-full py-3 bg-purple-600 text-white rounded-md font-medium hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors mb-4"
+                  >
+                    {loading ? '要約中...' : 'カスタム口調で要約'}
+                  </button>
+                )}
+              </>
             )}
 
-            <div className="flex gap-4">
-              <button
-                onClick={handleSummarize}
-                disabled={loading}
-                className="flex-1 py-3 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-              >
-                {loading ? '要約中...' : '要約する'}
-              </button>
-              <button
-                onClick={handleReset}
-                className="px-6 py-3 bg-gray-300 text-gray-700 rounded-md font-medium hover:bg-gray-400 transition-colors"
-              >
-                リセット
-              </button>
-            </div>
+            <button
+              onClick={handleReset}
+              className="w-full py-3 bg-gray-300 text-gray-700 rounded-md font-medium hover:bg-gray-400 transition-colors"
+            >
+              リセット
+            </button>
 
             {error && (
               <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
