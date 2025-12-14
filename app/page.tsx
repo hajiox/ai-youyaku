@@ -40,6 +40,11 @@ export default function Home() {
   const [amazonError, setAmazonError] = useState<string | null>(null);
 
   useEffect(() => {
+    // ページ表示時にも登録済み商品を読み込んでおく
+    fetchAmazonProducts([]);
+  }, []);
+
+  useEffect(() => {
     if (session?.user?.email) {
       loadToneSample();
     }
@@ -122,13 +127,11 @@ export default function Home() {
     return candidates.slice(0, 3);
   };
 
-  // Amazon商品を取得する関数（デバッグ情報表示対応）
+  // おすすめ商品（手動登録分）を取得する関数
   const fetchAmazonProducts = async (keywords: string[]) => {
-    if (keywords.length === 0) return;
-    
     setAmazonLoading(true);
     setAmazonError(null);
-    
+
     try {
       const response = await fetch('/api/amazon-products', {
         method: 'POST',
@@ -139,19 +142,13 @@ export default function Home() {
       if (response.ok) {
         const data = await response.json();
         setAmazonProducts(data.products || []);
-        
-        // ★APIからデバッグエラーが返ってきていたら表示する
-        if (data.debugError) {
-          console.error('Amazon API Debug Error:', data.debugError);
-          setAmazonError(`【開発者用ログ】Amazon APIエラー: ${data.debugError}`);
-        }
       } else {
-        setAmazonError('Amazon商品の取得に失敗しました');
+        setAmazonError('おすすめ商品の取得に失敗しました');
         setAmazonProducts([]);
       }
     } catch (error) {
-      console.error('Amazon商品取得エラー:', error);
-      setAmazonError('Amazon商品の取得中にエラーが発生しました');
+      console.error('おすすめ商品取得エラー:', error);
+      setAmazonError('おすすめ商品の取得中にエラーが発生しました');
       setAmazonProducts([]);
     } finally {
       setAmazonLoading(false);
@@ -217,9 +214,7 @@ export default function Home() {
         }
       }
 
-      if (keywords.length > 0) {
-        await fetchAmazonProducts(keywords);
-      }
+      await fetchAmazonProducts(keywords);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : '要約の生成に失敗しました');
@@ -348,7 +343,8 @@ export default function Home() {
             )}
           </div>
 
-          {(summary || detailedSummary) && (
+
+          {summary || detailedSummary ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="space-y-6">
                 {summary && (
@@ -388,9 +384,17 @@ export default function Home() {
                   products={amazonProducts}
                   isLoading={amazonLoading}
                   error={amazonError}
-                  partnerTag={process.env.NEXT_PUBLIC_AMAZON_PARTNER_TAG}
                 />
               </div>
+            </div>
+          ) : (
+            <div className="mt-6">
+              <AmazonProductShowcase
+                keywords={amazonKeywords}
+                products={amazonProducts}
+                isLoading={amazonLoading}
+                error={amazonError}
+              />
             </div>
           )}
         </div>
