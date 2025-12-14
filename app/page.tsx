@@ -40,6 +40,11 @@ export default function Home() {
   const [amazonError, setAmazonError] = useState<string | null>(null);
 
   useEffect(() => {
+    // ページ表示時にも登録済み商品を読み込んでおく
+    fetchAmazonProducts([]);
+  }, []);
+
+  useEffect(() => {
     if (session?.user?.email) {
       loadToneSample();
     }
@@ -338,7 +343,8 @@ export default function Home() {
             )}
           </div>
 
-          {(summary || detailedSummary) && (
+
+          {summary || detailedSummary ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="space-y-6">
                 {summary && (
@@ -380,6 +386,15 @@ export default function Home() {
                   error={amazonError}
                 />
               </div>
+            </div>
+          ) : (
+            <div className="mt-6">
+              <AmazonProductShowcase
+                keywords={amazonKeywords}
+                products={amazonProducts}
+                isLoading={amazonLoading}
+                error={amazonError}
+              />
             </div>
           )}
         </div>
