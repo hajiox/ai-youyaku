@@ -124,8 +124,6 @@ export default function Home() {
 
   // Amazon商品を取得する関数（デバッグ情報表示対応）
   const fetchAmazonProducts = async (keywords: string[]) => {
-    if (keywords.length === 0) return;
-    
     setAmazonLoading(true);
     setAmazonError(null);
     
@@ -217,9 +215,7 @@ export default function Home() {
         }
       }
 
-      if (keywords.length > 0) {
-        await fetchAmazonProducts(keywords);
-      }
+      await fetchAmazonProducts(keywords);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : '要約の生成に失敗しました');
@@ -388,7 +384,6 @@ export default function Home() {
                   products={amazonProducts}
                   isLoading={amazonLoading}
                   error={amazonError}
-                  partnerTag={process.env.NEXT_PUBLIC_AMAZON_PARTNER_TAG}
                 />
               </div>
             </div>
