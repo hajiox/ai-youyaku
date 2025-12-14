@@ -19,6 +19,16 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
+  const createEmptyProduct = (order: number): ManualProduct => ({
+    id: '',
+    title: '',
+    description: '',
+    price: '',
+    url: '',
+    image_url: '',
+    sort_order: order,
+  });
+
   // 初期データ読み込み
   useEffect(() => {
     fetchProducts();
@@ -28,8 +38,10 @@ export default function AdminPage() {
     try {
       const res = await fetch('/api/manual-products');
       const data = await res.json();
-      if (data.products) {
+      if (data.products && data.products.length > 0) {
         setProducts(data.products);
+      } else {
+        setProducts([1, 2, 3, 4].map((order) => createEmptyProduct(order)));
       }
     } catch (e) {
       console.error(e);
@@ -44,6 +56,10 @@ export default function AdminPage() {
     const newProducts = [...products];
     newProducts[index] = { ...newProducts[index], [field]: value };
     setProducts(newProducts);
+  };
+
+  const handleAddProduct = () => {
+    setProducts((prev) => [...prev, createEmptyProduct(prev.length + 1)]);
   };
 
   // 保存処理
@@ -76,7 +92,7 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex justify-between items-center mb-4">
           <h1 className="text-2xl font-bold text-gray-800">商品管理画面 (Manual Override)</h1>
           <button
             onClick={handleSave}
@@ -84,6 +100,16 @@ export default function AdminPage() {
             className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:bg-gray-400 transition shadow-md"
           >
             {saving ? '保存中...' : '全商品を保存'}
+          </button>
+        </div>
+
+        <div className="mb-6 text-right">
+          <button
+            type="button"
+            onClick={handleAddProduct}
+            className="px-4 py-2 text-sm font-semibold text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 border border-indigo-200"
+          >
+            ＋ 商品枠を追加
           </button>
         </div>
 
