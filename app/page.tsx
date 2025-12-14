@@ -1,7 +1,7 @@
 // /app/page.tsx ver.10
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import AmazonProductShowcase from './components/AmazonProductShowcase';
 import ToneSampleModal from './components/ToneSampleModal';
@@ -32,6 +32,16 @@ export default function Home() {
   const [error, setError] = useState('');
   const [toneSample, setToneSample] = useState('');
   const [showToneModal, setShowToneModal] = useState(false);
+  const [toneSaving, setToneSaving] = useState(false);
+  const [toneSaveError, setToneSaveError] = useState<string | null>(null);
+  const [toneSaveSuccess, setToneSaveSuccess] = useState<string | null>(null);
+
+  const TONE_SAMPLE_LIMIT = 2000;
+  const toneLabel: Record<'casual' | 'formal' | 'custom', string> = {
+    casual: 'カジュアル',
+    formal: 'フォーマル',
+    custom: 'マイ口調',
+  };
 
   // Amazon商品関連のステート
   const [amazonKeywords, setAmazonKeywords] = useState<string[]>([]);
@@ -44,6 +54,12 @@ export default function Home() {
       loadToneSample();
     }
   }, [session]);
+
+  const openToneModal = () => {
+    setToneSaveError(null);
+    setToneSaveSuccess(null);
+    setShowToneModal(true);
+  };
 
   const loadToneSample = async () => {
     try {
@@ -58,6 +74,10 @@ export default function Home() {
   };
 
   const handleSaveToneSample = async (sample: string) => {
+    setToneSaving(true);
+    setToneSaveError(null);
+    setToneSaveSuccess(null);
+
     try {
       const response = await fetch('/api/tone-sample', {
         method: 'POST',
@@ -65,16 +85,21 @@ export default function Home() {
         body: JSON.stringify({ toneSample: sample })
       });
 
+      const data = await response.json();
+
       if (response.ok) {
         setToneSample(sample);
-        setShowToneModal(false);
-        alert('口調サンプルを保存しました');
+        setToneSaveSuccess('口調サンプルを保存しました');
+        setTone('custom');
+        setTimeout(() => setShowToneModal(false), 400);
       } else {
-        alert('保存に失敗しました');
+        setToneSaveError(data?.error || '保存に失敗しました');
       }
     } catch (error) {
       console.error('保存エラー:', error);
-      alert('保存中にエラーが発生しました');
+      setToneSaveError('保存中にエラーが発生しました');
+    } finally {
+      setToneSaving(false);
     }
   };
 
@@ -158,11 +183,18 @@ export default function Home() {
     }
   };
 
-  const handleSummarize = async (selectedTone?: 'casual' | 'formal' | 'custom') => {
-    const currentTone = selectedTone || tone;
+  const handleSummarize = async (event?: FormEvent) => {
+    event?.preventDefault();
+    const currentTone = tone;
 
     if (!url.trim()) {
       setError('URLを入力してください');
+      return;
+    }
+
+    if (currentTone === 'custom' && !toneSample.trim()) {
+      setError('カスタム口調で要約するには、口調サンプルを登録してください。');
+      openToneModal();
       return;
     }
 
@@ -174,14 +206,16 @@ export default function Home() {
     setAmazonProducts([]);
 
     try {
+      const toneSampleForUse = currentTone === 'custom' ? toneSample : undefined;
+
       const shortResponse = await fetch('/api/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          url, 
-          tone: currentTone, 
+        body: JSON.stringify({
+          url,
+          tone: currentTone,
           mode: 'short',
-          toneSample: currentTone === 'custom' ? toneSample : undefined
+          toneSample: toneSampleForUse
         })
       });
 
@@ -202,11 +236,11 @@ export default function Home() {
       const detailedResponse = await fetch('/api/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          url, 
-          tone: currentTone, 
+        body: JSON.stringify({
+          url,
+          tone: currentTone,
           mode: 'long',
-          toneSample: currentTone === 'custom' ? toneSample : undefined
+          toneSample: toneSampleForUse
         })
       });
 
@@ -229,9 +263,13 @@ export default function Home() {
     }
   };
 
-  const handleToneButtonClick = (selectedTone: 'casual' | 'formal') => {
+  const handleToneSelect = (selectedTone: 'casual' | 'formal' | 'custom') => {
     setTone(selectedTone);
-    handleSummarize(selectedTone);
+    setError('');
+
+    if (selectedTone === 'custom' && !toneSample.trim()) {
+      openToneModal();
+    }
   };
 
   const handleReset = () => {
@@ -239,6 +277,7 @@ export default function Home() {
     setSummary('');
     setDetailedSummary('');
     setError('');
+    setTone('casual');
     setAmazonKeywords([]);
     setAmazonProducts([]);
     setAmazonError(null);
@@ -250,114 +289,193 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-100 flex flex-col">
       <main className="flex-1 container mx-auto px-4 py-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-indigo-600 mb-2">AI記事要約.com</h1>
-            <p className="text-gray-600">記事URLをペーストして、お好みのスタイルでAIが要約します。</p>
-            
-            <div className="mt-4">
-              {session ? (
-                <div className="flex items-center justify-center gap-4">
-                  <span className="text-sm text-gray-600">ログイン中: {session.user?.email}</span>
-                  <button
-                    onClick={() => setShowToneModal(true)}
-                    className="text-sm text-indigo-600 hover:text-indigo-800"
-                  >
-                    口調設定
-                  </button>
-                  <button
-                    onClick={() => signOut()}
-                    className="text-sm text-gray-600 hover:text-gray-800"
-                  >
-                    ログアウト
-                  </button>
+        <div className="max-w-6xl mx-auto space-y-6">
+          <div className="rounded-2xl bg-white/80 p-6 shadow-sm ring-1 ring-indigo-100">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-2">
+                <p className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-100">
+                  1クリックで要約を開始
+                </p>
+                <h1 className="text-3xl font-bold text-slate-800 sm:text-4xl">AI記事要約.com</h1>
+                <p className="text-sm text-slate-600 sm:text-base">
+                  URLを貼ってトーンを選ぶだけ。Enterキーかメインボタンで200字と1000字の要約をまとめて作成します。
+                </p>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 font-semibold text-green-700 ring-1 ring-green-100">
+                    ✨ 口調サンプルを保存して自分の声で要約
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 ring-1 ring-amber-100">
+                    ⚡️ 要約後はAmazon候補も自動表示
+                  </span>
                 </div>
-              ) : (
-                <button
-                  onClick={() => signIn('google')}
-                  className="px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Googleログイン
-                </button>
-              )}
-            </div>
-          </div>
+              </div>
 
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="記事URLを入力してください"
-              className="w-full px-4 py-3 border border-gray-300 rounded-md mb-4 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />
-
-            <div className="flex gap-4 mb-4">
-              <button
-                onClick={() => handleToneButtonClick('casual')}
-                disabled={loading}
-                className="flex-1 py-3 rounded-md font-medium transition-colors bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
-              >
-                {loading && tone === 'casual' ? '要約中...' : 'カジュアルで要約'}
-              </button>
-              <button
-                onClick={() => handleToneButtonClick('formal')}
-                disabled={loading}
-                className="flex-1 py-3 rounded-md font-medium transition-colors bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-              >
-                {loading && tone === 'formal' ? '要約中...' : 'フォーマルで要約'}
-              </button>
-            </div>
-
-            {session && (
-              <>
-                <button
-                  onClick={() => setTone('custom')}
-                  className={`w-full py-3 rounded-md font-medium transition-colors mb-4 ${
-                    tone === 'custom' ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
-                >
-                  カスタム口調{toneSample && ' (設定済み)'}
-                </button>
-
-                {tone === 'custom' && (
+              <div className="flex flex-col items-start gap-2 text-sm text-slate-600 md:items-end">
+                {session ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-100">
+                        ログイン中
+                      </span>
+                      <span className="text-xs sm:text-sm">{session.user?.email}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={openToneModal}
+                        className="rounded-md border border-indigo-100 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:border-indigo-200 hover:bg-indigo-50"
+                      >
+                        口調サンプルを編集
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => signOut()}
+                        className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                      >
+                        ログアウト
+                      </button>
+                    </div>
+                  </>
+                ) : (
                   <button
-                    onClick={() => handleSummarize()}
-                    disabled={loading}
-                    className="w-full py-3 bg-purple-600 text-white rounded-md font-medium hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors mb-4"
+                    type="button"
+                    onClick={() => signIn('google')}
+                    className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-indigo-700 shadow-sm ring-1 ring-indigo-100 transition hover:-translate-y-0.5 hover:shadow"
                   >
-                    {loading ? '要約中...' : 'カスタム口調で要約'}
+                    Googleでログインして口調を保存
                   </button>
                 )}
-              </>
-            )}
-
-            <button
-              onClick={handleReset}
-              className="w-full py-3 bg-gray-300 text-gray-700 rounded-md font-medium hover:bg-gray-400 transition-colors"
-            >
-              リセット
-            </button>
-
-            {error && (
-              <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
-                {error}
               </div>
-            )}
+            </div>
           </div>
 
+          <form onSubmit={handleSummarize} className="bg-white rounded-2xl shadow-md p-6 space-y-4 ring-1 ring-slate-100">
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-700">記事URL</label>
+              <input
+                type="text"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="例: https://example.com/article"
+                className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm shadow-inner focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              />
+              <p className="text-xs text-slate-500">Enterキーでも要約を開始できます。</p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm text-slate-700">
+                <span className="font-semibold">要約トーン</span>
+                <span className="text-xs text-slate-500">選択するとメインボタンがその口調で動きます</span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={() => handleToneSelect('casual')}
+                  className={`rounded-xl border px-4 py-3 text-left transition shadow-sm hover:-translate-y-0.5 hover:shadow-md ${
+                    tone === 'casual'
+                      ? 'border-blue-200 bg-blue-50 text-blue-800 ring-2 ring-blue-200'
+                      : 'border-slate-200 bg-white text-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-sm font-semibold">
+                    <span>カジュアル</span>
+                    {tone === 'casual' && <span className="text-xs text-blue-600">選択中</span>}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-600">友達に話すような親しみやすい口調でざっくり要約。</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleToneSelect('formal')}
+                  className={`rounded-xl border px-4 py-3 text-left transition shadow-sm hover:-translate-y-0.5 hover:shadow-md ${
+                    tone === 'formal'
+                      ? 'border-indigo-200 bg-indigo-50 text-indigo-800 ring-2 ring-indigo-200'
+                      : 'border-slate-200 bg-white text-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-sm font-semibold">
+                    <span>フォーマル</span>
+                    {tone === 'formal' && <span className="text-xs text-indigo-600">選択中</span>}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-600">ビジネスやレポート向けに端的で丁寧なまとめ。</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleToneSelect('custom')}
+                  className={`rounded-xl border px-4 py-3 text-left transition shadow-sm hover:-translate-y-0.5 hover:shadow-md ${
+                    tone === 'custom'
+                      ? 'border-purple-200 bg-purple-50 text-purple-800 ring-2 ring-purple-200'
+                      : 'border-slate-200 bg-white text-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-sm font-semibold">
+                    <span>マイ口調</span>
+                    {tone === 'custom' && <span className="text-xs text-purple-600">選択中</span>}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-600">あなたのポスト文体を真似した要約。{toneSample ? 'サンプル登録済み' : 'サンプル登録で精度UP'}</p>
+                  <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-1 text-[11px] font-semibold text-purple-700">
+                    {toneSample ? '保存済みサンプルを使用' : 'ログインでサンプル保存可'}
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:from-indigo-600 hover:to-blue-600 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {loading ? '要約を生成中…' : `${toneLabel[tone]}で要約する`}
+                  {!loading && <span className="text-xs font-bold">↵</span>}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                >
+                  リセット
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                <button
+                  type="button"
+                  onClick={openToneModal}
+                  className="rounded-full border border-purple-200 px-3 py-1.5 font-semibold text-purple-700 transition hover:bg-purple-50"
+                >
+                  口調サンプルを設定（最大{TONE_SAMPLE_LIMIT}文字）
+                </button>
+                <span>Enterキーでも要約を開始できます</span>
+              </div>
+            </div>
+
+            {error && (
+              <div className="flex items-start gap-2 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                <span className="text-lg">⚠️</span>
+                <span>{error}</span>
+              </div>
+            )}
+          </form>
+
           {(summary || detailedSummary) && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <div className="space-y-6">
                 {summary && (
-                  <div className="bg-white rounded-lg shadow-md p-6">
-                    <div className="flex justify-between items-center mb-4">
-                      <h2 className="text-xl font-bold text-gray-800">200字要約</h2>
+                  <div className="bg-white rounded-2xl shadow-md p-6 ring-1 ring-slate-100">
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Short</p>
+                        <h2 className="text-xl font-bold text-gray-800">200字要約</h2>
+                        <p className="text-xs text-slate-500">選択トーン: {toneLabel[tone]}</p>
+                      </div>
                       <button
                         onClick={() => handleCopy(summary)}
-                        className="px-3 py-1 bg-indigo-100 text-indigo-600 rounded-md text-sm hover:bg-indigo-200 transition-colors"
+                        className="inline-flex items-center gap-2 rounded-md bg-indigo-50 px-3 py-1 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100"
                       >
                         コピー
                       </button>
@@ -367,12 +485,16 @@ export default function Home() {
                 )}
 
                 {detailedSummary && (
-                  <div className="bg-white rounded-lg shadow-md p-6">
-                    <div className="flex justify-between items-center mb-4">
-                      <h2 className="text-xl font-bold text-gray-800">1000字要約</h2>
+                  <div className="bg-white rounded-2xl shadow-md p-6 ring-1 ring-slate-100">
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Long</p>
+                        <h2 className="text-xl font-bold text-gray-800">1000字要約</h2>
+                        <p className="text-xs text-slate-500">選択トーン: {toneLabel[tone]}</p>
+                      </div>
                       <button
                         onClick={() => handleCopy(detailedSummary)}
-                        className="px-3 py-1 bg-indigo-100 text-indigo-600 rounded-md text-sm hover:bg-indigo-200 transition-colors"
+                        className="inline-flex items-center gap-2 rounded-md bg-indigo-50 px-3 py-1 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100"
                       >
                         コピー
                       </button>
@@ -402,13 +524,16 @@ export default function Home() {
         </div>
       </footer>
 
-      {showToneModal && (
-        <ToneSampleModal
-          currentSample={toneSample}
-          onSave={handleSaveToneSample}
-          onClose={() => setShowToneModal(false)}
-        />
-      )}
+      <ToneSampleModal
+        isOpen={showToneModal}
+        currentSample={toneSample}
+        onSave={handleSaveToneSample}
+        onClose={() => setShowToneModal(false)}
+        maxLength={TONE_SAMPLE_LIMIT}
+        isSaving={toneSaving}
+        saveError={toneSaveError}
+        saveSuccessMessage={toneSaveSuccess}
+      />
     </div>
   );
 }

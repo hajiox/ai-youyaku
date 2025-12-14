@@ -1,7 +1,7 @@
 // app/components/ToneSampleModal.tsx
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, ChangeEvent } from 'react';
 
 interface ToneSampleModalProps {
   isOpen: boolean;
@@ -34,7 +34,7 @@ export default function ToneSampleModal({
     }
   }, [isOpen, currentSample]);
 
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleTextChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     let text = e.target.value;
     if (text.length > maxLength) {
       text = text.substring(0, maxLength);
@@ -44,9 +44,8 @@ export default function ToneSampleModal({
   };
 
   const handleSaveClick = async () => {
-    if (!sampleText.trim() && !currentSample) { // 新規登録時で空の場合はエラーにしても良い
-        // もしエラーメッセージをモーダル内で表示するならここでセット
-        return;
+    if (!sampleText.trim() && !currentSample) {
+      return;
     }
     await onSave(sampleText);
   };
@@ -99,7 +98,7 @@ export default function ToneSampleModal({
           </button>
           <button
             onClick={handleSaveClick}
-            disabled={isSaving || (!sampleText.trim() && !currentSample) || sampleText === currentSample} // 保存中、未入力(かつ初期値も空)、または変更なしの場合は無効化
+            disabled={isSaving || (!sampleText.trim() && !currentSample) || sampleText === currentSample}
             className={`px-4 py-2.5 bg-green-500 text-white text-sm rounded-md font-medium hover:bg-green-600 active:bg-green-700 transition-colors focus:outline-none focus:ring-1 focus:ring-green-400 focus:ring-offset-1 w-full sm:w-auto order-1 sm:order-2 ${
               (isSaving || (!sampleText.trim() && !currentSample) || sampleText === currentSample) ? "opacity-50 cursor-not-allowed" : ""
             }`}
