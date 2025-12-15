@@ -1,4 +1,4 @@
-// /app/page.tsx ver.10
+// /app/page.tsx ver.11 (モバイル判定追加版)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -17,8 +17,7 @@ type AmazonProduct = {
   rating?: number;
   reviewCount?: number;
   matchedKeywords?: string[];
-  source?: 'article' | 'aizu-brand';
-  description?: string;
+  source?: 'article' | 'registered-link';
 };
 
 export default function Home() {
@@ -40,9 +39,17 @@ export default function Home() {
   const [amazonLoading, setAmazonLoading] = useState(false);
   const [amazonError, setAmazonError] = useState<string | null>(null);
 
+  // モバイル判定
+  const [isMobile, setIsMobile] = useState(false);
+
   useEffect(() => {
-    // ページ表示時にも登録済み商品を読み込んでおく
-    fetchAmazonProducts([]);
+    // モバイル判定
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
   useEffect(() => {
@@ -128,28 +135,35 @@ export default function Home() {
     return candidates.slice(0, 3);
   };
 
-  // おすすめ商品（手動登録分）を取得する関数
+  // Amazon商品を取得する関数（モバイル判定を送信）
   const fetchAmazonProducts = async (keywords: string[]) => {
+    if (keywords.length === 0) return;
+    
     setAmazonLoading(true);
     setAmazonError(null);
-
+    
     try {
       const response = await fetch('/api/amazon-products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keywords })
+        body: JSON.stringify({ keywords, isMobile })
       });
 
       if (response.ok) {
         const data = await response.json();
         setAmazonProducts(data.products || []);
+        
+        if (data.debugError) {
+          console.error('Amazon API Debug Error:', data.debugError);
+          setAmazonError(`【開発者用ログ】Amazon APIエラー: ${data.debugError}`);
+        }
       } else {
-        setAmazonError('おすすめ商品の取得に失敗しました');
+        setAmazonError('商品の取得に失敗しました');
         setAmazonProducts([]);
       }
     } catch (error) {
-      console.error('おすすめ商品取得エラー:', error);
-      setAmazonError('おすすめ商品の取得中にエラーが発生しました');
+      console.error('商品取得エラー:', error);
+      setAmazonError('商品の取得中にエラーが発生しました');
       setAmazonProducts([]);
     } finally {
       setAmazonLoading(false);
@@ -215,7 +229,9 @@ export default function Home() {
         }
       }
 
-      await fetchAmazonProducts(keywords);
+      if (keywords.length > 0) {
+        await fetchAmazonProducts(keywords);
+      }
 
     } catch (err) {
       setError(err instanceof Error ? err.message : '要約の生成に失敗しました');
@@ -344,8 +360,7 @@ export default function Home() {
             )}
           </div>
 
-
-          {summary || detailedSummary ? (
+          {(summary || detailedSummary) && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="space-y-6">
                 {summary && (
@@ -385,17 +400,9 @@ export default function Home() {
                   products={amazonProducts}
                   isLoading={amazonLoading}
                   error={amazonError}
+                  partnerTag={process.env.NEXT_PUBLIC_AMAZON_PARTNER_TAG}
                 />
               </div>
-            </div>
-          ) : (
-            <div className="mt-6">
-              <AmazonProductShowcase
-                keywords={amazonKeywords}
-                products={amazonProducts}
-                isLoading={amazonLoading}
-                error={amazonError}
-              />
             </div>
           )}
         </div>
