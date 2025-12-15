@@ -18,6 +18,7 @@ type AmazonProduct = {
   reviewCount?: number;
   matchedKeywords?: string[];
   source?: 'article' | 'aizu-brand';
+  description?: string;
 };
 
 export default function Home() {

@@ -1,6 +1,6 @@
 // /app/components/AmazonProductShowcase.tsx
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type AmazonProduct = {
   asin: string;
@@ -13,6 +13,7 @@ type AmazonProduct = {
   rating?: number;
   reviewCount?: number;
   matchedKeywords?: string[];
+  description?: string;
 };
 
 type AmazonProductShowcaseProps = {
@@ -60,8 +61,29 @@ const AmazonProductShowcase = ({
   error,
 }: AmazonProductShowcaseProps) => {
   const displayKeywords = useMemo(() => keywords.slice(0, 5), [keywords]);
+  const [visibleProducts, setVisibleProducts] = useState<AmazonProduct[]>([]);
+  const [isMobile, setIsMobile] = useState(false);
 
-  const shouldRender = isLoading || error || products.length > 0;
+  useEffect(() => {
+    const updateIsMobile = () => setIsMobile(window.matchMedia("(max-width: 640px)").matches);
+
+    updateIsMobile();
+    window.addEventListener("resize", updateIsMobile);
+    return () => window.removeEventListener("resize", updateIsMobile);
+  }, []);
+
+  useEffect(() => {
+    if (products.length === 0) {
+      setVisibleProducts([]);
+      return;
+    }
+
+    const count = isMobile ? 1 : 2;
+    const shuffled = [...products].sort(() => Math.random() - 0.5);
+    setVisibleProducts(shuffled.slice(0, Math.min(count, shuffled.length)));
+  }, [products, isMobile]);
+
+  const shouldRender = isLoading || error || visibleProducts.length > 0 || products.length > 0;
 
   if (!shouldRender) {
     return null;
@@ -111,9 +133,9 @@ const AmazonProductShowcase = ({
         </div>
       )}
 
-      {!isLoading && products.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-1">
-          {products.map((product) => (
+      {!isLoading && visibleProducts.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {visibleProducts.map((product) => (
             <article
               key={product.asin}
               className="group flex h-full flex-col overflow-hidden rounded-xl border border-slate-100 bg-white transition hover:-translate-y-1 hover:shadow-md"
@@ -147,6 +169,12 @@ const AmazonProductShowcase = ({
                       </span>
                     ))}
                   </div>
+                )}
+
+                {product.description && (
+                  <p className="mt-3 text-xs leading-relaxed text-slate-600">
+                    {product.description}
+                  </p>
                 )}
 
                 <div className="mt-auto pt-4">

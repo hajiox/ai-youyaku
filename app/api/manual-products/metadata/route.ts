@@ -4,44 +4,24 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 const extractMetaContent = (html: string, property: string): string | undefined => {
-  const regex = new RegExp(`<meta[^>]+property=["']${property}["'][^>]+content=["']([^"']+)["']`, "i");
-  const match = html.match(regex);
+  const propertyRegex = new RegExp(
+    `<meta[^>]+property=["']${property}["'][^>]+content=["']([^"']+)["']`,
+    "i",
+  );
+  const nameRegex = new RegExp(
+    `<meta[^>]+name=["']${property}["'][^>]+content=["']([^"']+)["']`,
+    "i",
+  );
+
+  const byProperty = html.match(propertyRegex)?.[1];
+  if (byProperty) return byProperty;
+
+  return html.match(nameRegex)?.[1];
+};
+
+const extractTitleTag = (html: string): string | undefined => {
+  const match = html.match(/<title>([^<]+)<\/title>/i);
   return match?.[1];
-};
-
-const extractJsonLdProduct = (html: string): Record<string, any> | undefined => {
-  const scripts = [...html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
-
-  for (const script of scripts) {
-    try {
-      const jsonText = script[1].trim();
-      const parsed = JSON.parse(jsonText);
-      const candidates = Array.isArray(parsed) ? parsed : [parsed];
-
-      for (const candidate of candidates) {
-        if (candidate?.["@type"] === "Product") {
-          return candidate;
-        }
-      }
-    } catch (error) {
-      // JSONパースに失敗した場合は次の候補をチェック
-      continue;
-    }
-  }
-
-  return undefined;
-};
-
-const formatPrice = (price?: string | number, currency?: string) => {
-  if (!price) return undefined;
-
-  const numeric = typeof price === "number" ? price : Number(price);
-  if (!Number.isNaN(numeric)) {
-    const prefix = currency === "JPY" || currency === "¥" || !currency ? "¥" : `${currency} `;
-    return `${prefix}${numeric.toLocaleString("ja-JP")}`;
-  }
-
-  return typeof price === "string" ? price : undefined;
 };
 
 export async function GET(req: NextRequest) {
@@ -69,23 +49,13 @@ export async function GET(req: NextRequest) {
 
     const html = await response.text();
 
-    const ogTitle = extractMetaContent(html, "og:title");
-    const ogImage = extractMetaContent(html, "og:image");
-    const ogPrice = extractMetaContent(html, "og:price:amount");
-    const ogCurrency = extractMetaContent(html, "og:price:currency");
-
-    const productJsonLd = extractJsonLdProduct(html);
-
-    const name = productJsonLd?.name || ogTitle;
-    const image = productJsonLd?.image || ogImage;
-    const price = productJsonLd?.offers?.price || ogPrice;
-    const currency = productJsonLd?.offers?.priceCurrency || ogCurrency;
+    const ogTitle = extractMetaContent(html, "og:title") || extractTitleTag(html);
+    const ogDescription =
+      extractMetaContent(html, "og:description") || extractMetaContent(html, "description");
 
     return NextResponse.json({
-      title: typeof name === "string" ? name : undefined,
-      imageUrl: typeof image === "string" ? image : Array.isArray(image) ? image[0] : undefined,
-      price: formatPrice(price, currency),
-      currency: currency || undefined,
+      title: typeof ogTitle === "string" ? ogTitle : undefined,
+      description: typeof ogDescription === "string" ? ogDescription : undefined,
     });
   } catch (error) {
     console.error("Product metadata fetch failed", error);

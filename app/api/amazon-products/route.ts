@@ -13,6 +13,7 @@ type Product = {
   price?: string;
   matchedKeywords?: string[];
   source?: "aizu-brand";
+  description?: string;
 };
 
 // --- Supabase設定 ---
@@ -57,6 +58,7 @@ async function fetchManualProducts(): Promise<Product[]> {
     url: item.url,
     imageUrl: item.image_url,
     price: formatPrice(item.price),
+    description: item.description,
     source: "aizu-brand",
   }));
 }
@@ -82,8 +84,8 @@ export async function POST(req: NextRequest) {
     ? []
     : [{
         asin: "manual-fallback-1",
-        title: "おすすめ商品が登録されていません",
-        url: "https://www.amazon.co.jp/",
+        title: "おすすめリンクが登録されていません",
+        url: "https://example.com/",
         source: "aizu-brand" as const,
       }];
 

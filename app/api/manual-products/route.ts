@@ -43,9 +43,7 @@ export async function POST(req: Request) {
       id: p.id,
       title: p.title,
       description: p.description,
-      price: p.price,
       url: p.url,
-      image_url: p.image_url,
       sort_order: p.sort_order,
       updated_at: new Date().toISOString(),
     }));
@@ -60,5 +58,25 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error('商品データ保存エラー:', error);
     return NextResponse.json({ error: '保存に失敗しました' }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    }
+
+    const { error } = await supabase.from('manual_products').delete().eq('id', id);
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('商品データ削除エラー:', error);
+    return NextResponse.json({ error: '削除に失敗しました' }, { status: 500 });
   }
 }
