@@ -206,7 +206,7 @@ const AmazonProductShowcase = ({
                 )}
 
                 <div className="mt-auto pt-4">
-                  
+                  <a
                     href={product.url}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -244,7 +244,7 @@ const AmazonProductShowcase = ({
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {fallbackSearches.map((item) => (
-              
+              <a
                 key={item.keyword}
                 href={item.url}
                 target="_blank"
