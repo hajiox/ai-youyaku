@@ -1,4 +1,4 @@
-// /app/page.tsx ver.11 (モバイル判定追加版)
+// /app/page.tsx ver.13 (ToneSampleModal修正版)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -30,8 +30,13 @@ export default function Home() {
   const [detailedSummary, setDetailedSummary] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // 口調設定モーダル関連
   const [toneSample, setToneSample] = useState('');
   const [showToneModal, setShowToneModal] = useState(false);
+  const [isSavingTone, setIsSavingTone] = useState(false);
+  const [saveToneError, setSaveToneError] = useState<string | null>(null);
+  const [saveToneSuccess, setSaveToneSuccess] = useState<string | null>(null);
 
   // Amazon商品関連のステート
   const [amazonKeywords, setAmazonKeywords] = useState<string[]>([]);
@@ -71,6 +76,10 @@ export default function Home() {
   };
 
   const handleSaveToneSample = async (sample: string) => {
+    setIsSavingTone(true);
+    setSaveToneError(null);
+    setSaveToneSuccess(null);
+
     try {
       const response = await fetch('/api/tone-sample', {
         method: 'POST',
@@ -80,14 +89,21 @@ export default function Home() {
 
       if (response.ok) {
         setToneSample(sample);
-        setShowToneModal(false);
-        alert('口調サンプルを保存しました');
+        setSaveToneSuccess('口調サンプルを保存しました');
+        // 成功したら少し待ってから閉じる
+        setTimeout(() => {
+          setShowToneModal(false);
+          setSaveToneSuccess(null);
+        }, 1500);
       } else {
-        alert('保存に失敗しました');
+        const data = await response.json();
+        setSaveToneError(data.error || '保存に失敗しました');
       }
     } catch (error) {
       console.error('保存エラー:', error);
-      alert('保存中にエラーが発生しました');
+      setSaveToneError('保存中にエラーが発生しました');
+    } finally {
+      setIsSavingTone(false);
     }
   };
 
@@ -416,9 +432,14 @@ export default function Home() {
 
       {showToneModal && (
         <ToneSampleModal
+          isOpen={showToneModal}
+          maxLength={2000}
           currentSample={toneSample}
           onSave={handleSaveToneSample}
           onClose={() => setShowToneModal(false)}
+          isSaving={isSavingTone}
+          saveError={saveToneError}
+          saveSuccessMessage={saveToneSuccess}
         />
       )}
     </div>
