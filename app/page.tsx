@@ -1,4 +1,4 @@
-// /app/page.tsx ver.13 (ToneSampleModal修正版)
+// /app/page.tsx ver.14 - 3プラットフォームUI版
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,39 +6,39 @@ import { useSession, signIn, signOut } from 'next-auth/react';
 import AmazonProductShowcase from './components/AmazonProductShowcase';
 import ToneSampleModal from './components/ToneSampleModal';
 
+type SummaryResult = {
+  twitter: string;
+  threads: string;
+  note: string;
+};
+
 type AmazonProduct = {
   asin: string;
   title: string;
   url: string;
   imageUrl?: string;
-  price?: string;
-  amount?: number;
-  currency?: string;
-  rating?: number;
-  reviewCount?: number;
-  matchedKeywords?: string[];
-  source?: 'article' | 'registered-link';
+  source?: string;
 };
 
 export default function Home() {
   const { data: session } = useSession();
   const [url, setUrl] = useState('');
   const [tone, setTone] = useState<'casual' | 'formal' | 'custom'>('casual');
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [summaryLength, setSummaryLength] = useState<'short' | 'detailed'>('short');
-  const [summary, setSummary] = useState('');
-  const [detailedSummary, setDetailedSummary] = useState('');
+  
+  // 要約結果をオブジェクトで管理
+  const [summaries, setSummaries] = useState<SummaryResult | null>(null);
+  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
-  // 口調設定モーダル関連
+  // 口調設定関連
   const [toneSample, setToneSample] = useState('');
   const [showToneModal, setShowToneModal] = useState(false);
   const [isSavingTone, setIsSavingTone] = useState(false);
   const [saveToneError, setSaveToneError] = useState<string | null>(null);
   const [saveToneSuccess, setSaveToneSuccess] = useState<string | null>(null);
 
-  // Amazon商品関連のステート
+  // Amazon商品関連
   const [amazonKeywords, setAmazonKeywords] = useState<string[]>([]);
   const [amazonProducts, setAmazonProducts] = useState<AmazonProduct[]>([]);
   const [amazonLoading, setAmazonLoading] = useState(false);
@@ -48,19 +48,14 @@ export default function Home() {
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    // モバイル判定
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
   useEffect(() => {
-    if (session?.user?.email) {
-      loadToneSample();
-    }
+    if (session?.user?.email) loadToneSample();
   }, [session]);
 
   const loadToneSample = async () => {
@@ -70,117 +65,56 @@ export default function Home() {
         const data = await response.json();
         setToneSample(data.toneSample || '');
       }
-    } catch (error) {
-      console.error('口調サンプルの読み込みエラー:', error);
-    }
+    } catch (e) { console.error(e); }
   };
 
   const handleSaveToneSample = async (sample: string) => {
     setIsSavingTone(true);
     setSaveToneError(null);
     setSaveToneSuccess(null);
-
     try {
       const response = await fetch('/api/tone-sample', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ toneSample: sample })
       });
-
       if (response.ok) {
         setToneSample(sample);
-        setSaveToneSuccess('口調サンプルを保存しました');
-        // 成功したら少し待ってから閉じる
-        setTimeout(() => {
-          setShowToneModal(false);
-          setSaveToneSuccess(null);
-        }, 1500);
+        setSaveToneSuccess('保存しました');
+        setTimeout(() => { setShowToneModal(false); setSaveToneSuccess(null); }, 1500);
       } else {
-        const data = await response.json();
-        setSaveToneError(data.error || '保存に失敗しました');
+        setSaveToneError('保存に失敗しました');
       }
-    } catch (error) {
-      console.error('保存エラー:', error);
-      setSaveToneError('保存中にエラーが発生しました');
+    } catch (e) {
+      setSaveToneError('エラーが発生しました');
     } finally {
       setIsSavingTone(false);
     }
   };
 
-  // 要約からキーワードを抽出する関数
-  const extractKeywords = (text: string): string[] => {
-    if (!text) return [];
-
-    const ignoreList = [
-      'ねぇねぇ', 'なんか', 'すごい', 'これ', 'それ', 'あれ', 'どれ',
-      '今日の', 'ニュース', '知ってる', 'あのね', '実は', 'なんと',
-      'どう', '思う', 'ます', 'です', 'でした', 'ました', 'から', 'ので',
-      'という', 'こと', 'もの', 'さん', 'くん', 'ちゃん', 'みたい', '感じ',
-      '記事', '筆者', '概要', 'ポイント', 'まとめ',
-      '本日', '今日', '昨日', '明日', '現在', '今回', '今後', '過去', '時点',
-      '日本', '世界', '国内', '海外', '米国', '中国', '欧州', 
-      '市場', '株式', '株価', '指数', '平均', '全体', '影響',
-      '背景', '要因', '結果', '発表', '展開', '見通し', '状況', '状態',
-      '上昇', '下落', '回復', '更新', '推移', '最高', '最低', '記録',
-      '以上', '以下', '未満', '程度', '約', '円', 'ドル',
-      '関連', '銘柄', '中心', '堅調', '好調', '不調', '需要'
-    ];
-
-    const candidates: string[] = [];
-    const isValid = (w: string) => {
-      const clean = w.trim();
-      if (clean.length < 2 || clean.length > 20) return false;
-      if (ignoreList.includes(clean)) return false;
-      if (/^[\d০-৯]/.test(clean)) return false;
-      if (/^(月|火|水|木|金|土|日)曜日?$/.test(clean)) return false;
-      return true;
-    };
-
-    const katakanaMatches = text.match(/[ァ-ヶー]{2,}/g) || [];
-    for (const w of katakanaMatches) {
-      if (isValid(w) && !candidates.includes(w)) candidates.push(w);
-    }
-    const engMatches = text.match(/[A-Za-z]{2,}/g) || [];
-    for (const w of engMatches) {
-      if (isValid(w) && !candidates.includes(w)) candidates.push(w);
-    }
-    const kanjiMatches = text.match(/[一-龠]{2,}/g) || [];
-    for (const w of kanjiMatches) {
-      if (isValid(w) && !candidates.includes(w)) candidates.push(w);
-    }
-    return candidates.slice(0, 3);
-  };
-
-  // Amazon商品を取得する関数（モバイル判定を送信）
-  const fetchAmazonProducts = async (keywords: string[]) => {
-    if (keywords.length === 0) return;
+  // 商品取得（noteの要約からキーワード抽出）
+  const fetchAmazonProducts = async (text: string) => {
+    // 簡易キーワード抽出（3文字以上のカタカナ/漢字）
+    const keywords = text.match(/[ァ-ヶー]{3,}|[一-龠]{2,}/g) || [];
+    const uniqueKeywords = Array.from(new Set(keywords)).slice(0, 3);
     
+    setAmazonKeywords(uniqueKeywords);
+    
+    if (uniqueKeywords.length === 0) return;
+
     setAmazonLoading(true);
-    setAmazonError(null);
-    
     try {
       const response = await fetch('/api/amazon-products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keywords, isMobile })
+        body: JSON.stringify({ isMobile }) // キーワード検索廃止済みのためisMobileのみ
       });
-
       if (response.ok) {
         const data = await response.json();
         setAmazonProducts(data.products || []);
-        
-        if (data.debugError) {
-          console.error('Amazon API Debug Error:', data.debugError);
-          setAmazonError(`【開発者用ログ】Amazon APIエラー: ${data.debugError}`);
-        }
-      } else {
-        setAmazonError('商品の取得に失敗しました');
-        setAmazonProducts([]);
       }
-    } catch (error) {
-      console.error('商品取得エラー:', error);
-      setAmazonError('商品の取得中にエラーが発生しました');
-      setAmazonProducts([]);
+    } catch (e) {
+      setAmazonError('商品取得エラー');
     } finally {
       setAmazonLoading(false);
     }
@@ -188,245 +122,239 @@ export default function Home() {
 
   const handleSummarize = async (selectedTone?: 'casual' | 'formal' | 'custom') => {
     const currentTone = selectedTone || tone;
-
-    if (!url.trim()) {
-      setError('URLを入力してください');
-      return;
-    }
+    if (!url.trim()) { setError('URLを入力してください'); return; }
 
     setLoading(true);
     setError('');
-    setSummary('');
-    setDetailedSummary('');
-    setAmazonKeywords([]);
+    setSummaries(null);
     setAmazonProducts([]);
 
     try {
-      const shortResponse = await fetch('/api/summary', {
+      const response = await fetch('/api/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           url, 
           tone: currentTone, 
-          mode: 'short',
           toneSample: currentTone === 'custom' ? toneSample : undefined
         })
       });
 
-      const shortData = await shortResponse.json();
+      const data = await response.json();
 
-      if (!shortResponse.ok) {
-        throw new Error(shortData.error || '要約の生成に失敗しました');
-      }
-      if (!shortData.summary) {
-        throw new Error('要約データが空でした。別の記事でお試しください。');
-      }
+      if (!response.ok) throw new Error(data.error || '要約失敗');
+      if (!data.summary) throw new Error('要約データが空でした');
 
-      setSummary(shortData.summary);
-
-      const keywords = extractKeywords(shortData.summary);
-      setAmazonKeywords(keywords);
-
-      const detailedResponse = await fetch('/api/summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          url, 
-          tone: currentTone, 
-          mode: 'long',
-          toneSample: currentTone === 'custom' ? toneSample : undefined
-        })
-      });
-
-      if (detailedResponse.ok) {
-        const detailedData = await detailedResponse.json();
-        if (detailedData.summary) {
-          setDetailedSummary(detailedData.summary);
-        }
-      }
-
-      if (keywords.length > 0) {
-        await fetchAmazonProducts(keywords);
+      setSummaries(data.summary);
+      
+      // note要約を使って商品検索（一番情報量が多いため）
+      if (data.summary.note) {
+        fetchAmazonProducts(data.summary.note);
       }
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : '要約の生成に失敗しました');
-      console.error(err);
+      setError(err instanceof Error ? err.message : 'エラーが発生しました');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleToneButtonClick = (selectedTone: 'casual' | 'formal') => {
-    setTone(selectedTone);
-    handleSummarize(selectedTone);
-  };
-
-  const handleReset = () => {
-    setUrl('');
-    setSummary('');
-    setDetailedSummary('');
-    setError('');
-    setAmazonKeywords([]);
-    setAmazonProducts([]);
-    setAmazonError(null);
+  const handleToneButtonClick = (t: 'casual' | 'formal') => {
+    setTone(t);
+    handleSummarize(t);
   };
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
-    alert('コピーしました');
+    alert('コピーしました！');
+  };
+
+  const handleReset = () => {
+    setUrl('');
+    setSummaries(null);
+    setError('');
+    setAmazonProducts([]);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex flex-col">
-      <main className="flex-1 container mx-auto px-4 py-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-indigo-600 mb-2">AI記事要約.com</h1>
-            <p className="text-gray-600">記事URLをペーストして、お好みのスタイルでAIが要約します。</p>
-            
-            <div className="mt-4">
-              {session ? (
-                <div className="flex items-center justify-center gap-4">
-                  <span className="text-sm text-gray-600">ログイン中: {session.user?.email}</span>
-                  <button
-                    onClick={() => setShowToneModal(true)}
-                    className="text-sm text-indigo-600 hover:text-indigo-800"
-                  >
-                    口調設定
-                  </button>
-                  <button
-                    onClick={() => signOut()}
-                    className="text-sm text-gray-600 hover:text-gray-800"
-                  >
-                    ログアウト
-                  </button>
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+      <main className="flex-1 container mx-auto px-4 py-8 max-w-5xl">
+        {/* ヘッダーエリア */}
+        <div className="text-center mb-10">
+          <h1 className="text-3xl md:text-4xl font-extrabold text-slate-800 mb-3 tracking-tight">
+            AI記事要約.com
+          </h1>
+          <p className="text-slate-500 text-sm md:text-base">
+            記事URLひとつで、X・Threads・note用の要約を一括生成します。
+          </p>
+          
+          <div className="mt-6 flex flex-wrap justify-center items-center gap-4">
+            {session ? (
+              <>
+                <div className="flex items-center bg-white px-3 py-1.5 rounded-full shadow-sm border border-slate-200">
+                  <div className="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
+                  <span className="text-xs text-slate-600">{session.user?.email}</span>
                 </div>
-              ) : (
                 <button
-                  onClick={() => signIn('google')}
-                  className="px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  onClick={() => setShowToneModal(true)}
+                  className="text-xs font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-3 py-1.5 rounded-full transition-colors"
                 >
-                  Googleログイン
+                  自分の口調を設定
                 </button>
-              )}
-            </div>
+                <button
+                  onClick={() => signOut()}
+                  className="text-xs text-slate-500 hover:text-slate-700 underline"
+                >
+                  ログアウト
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => signIn('google')}
+                className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 shadow-sm transition-all"
+              >
+                Googleでログインして機能制限を解除
+              </button>
+            )}
           </div>
+        </div>
 
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="記事URLを入力してください"
-              className="w-full px-4 py-3 border border-gray-300 rounded-md mb-4 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />
+        {/* 入力エリア */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8">
+          <input
+            type="text"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://..."
+            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg mb-6 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-slate-800 placeholder-slate-400"
+          />
 
-            <div className="flex gap-4 mb-4">
-              <button
-                onClick={() => handleToneButtonClick('casual')}
-                disabled={loading}
-                className="flex-1 py-3 rounded-md font-medium transition-colors bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
-              >
-                {loading && tone === 'casual' ? '要約中...' : 'カジュアルで要約'}
-              </button>
-              <button
-                onClick={() => handleToneButtonClick('formal')}
-                disabled={loading}
-                className="flex-1 py-3 rounded-md font-medium transition-colors bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-              >
-                {loading && tone === 'formal' ? '要約中...' : 'フォーマルで要約'}
-              </button>
-            </div>
-
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <button
+              onClick={() => handleToneButtonClick('casual')}
+              disabled={loading}
+              className="py-3 px-2 rounded-lg text-sm font-bold text-white bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-500 hover:to-blue-600 shadow-sm transition-all disabled:opacity-50"
+            >
+              😊 カジュアル
+            </button>
+            <button
+              onClick={() => handleToneButtonClick('formal')}
+              disabled={loading}
+              className="py-3 px-2 rounded-lg text-sm font-bold text-white bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 shadow-sm transition-all disabled:opacity-50"
+            >
+              👔 フォーマル
+            </button>
+            
             {session && (
               <>
                 <button
-                  onClick={() => setTone('custom')}
-                  className={`w-full py-3 rounded-md font-medium transition-colors mb-4 ${
-                    tone === 'custom' ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  onClick={() => { setTone('custom'); handleSummarize('custom'); }}
+                  disabled={loading}
+                  className={`col-span-2 md:col-span-2 py-3 px-2 rounded-lg text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 ${
+                    toneSample 
+                      ? "bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700" 
+                      : "bg-slate-300 cursor-not-allowed"
                   }`}
                 >
-                  カスタム口調{toneSample && ' (設定済み)'}
+                  ✨ あなたの口調で要約 {toneSample ? "" : "(未設定)"}
                 </button>
-
-                {tone === 'custom' && (
-                  <button
-                    onClick={() => handleSummarize()}
-                    disabled={loading}
-                    className="w-full py-3 bg-purple-600 text-white rounded-md font-medium hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors mb-4"
-                  >
-                    {loading ? '要約中...' : 'カスタム口調で要約'}
-                  </button>
-                )}
               </>
-            )}
-
-            <button
-              onClick={handleReset}
-              className="w-full py-3 bg-gray-300 text-gray-700 rounded-md font-medium hover:bg-gray-400 transition-colors"
-            >
-              リセット
-            </button>
-
-            {error && (
-              <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
-                {error}
-              </div>
             )}
           </div>
 
-          {(summary || detailedSummary) && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="space-y-6">
-                {summary && (
-                  <div className="bg-white rounded-lg shadow-md p-6">
-                    <div className="flex justify-between items-center mb-4">
-                      <h2 className="text-xl font-bold text-gray-800">200字要約</h2>
-                      <button
-                        onClick={() => handleCopy(summary)}
-                        className="px-3 py-1 bg-indigo-100 text-indigo-600 rounded-md text-sm hover:bg-indigo-200 transition-colors"
-                      >
-                        コピー
-                      </button>
-                    </div>
-                    <p className="text-gray-700 leading-relaxed">{summary}</p>
-                  </div>
-                )}
+          {(summaries || error) && (
+            <button
+              onClick={handleReset}
+              className="w-full py-2 text-slate-400 hover:text-slate-600 text-sm transition-colors"
+            >
+              入力をリセット
+            </button>
+          )}
 
-                {detailedSummary && (
-                  <div className="bg-white rounded-lg shadow-md p-6">
-                    <div className="flex justify-between items-center mb-4">
-                      <h2 className="text-xl font-bold text-gray-800">1000字要約</h2>
-                      <button
-                        onClick={() => handleCopy(detailedSummary)}
-                        className="px-3 py-1 bg-indigo-100 text-indigo-600 rounded-md text-sm hover:bg-indigo-200 transition-colors"
-                      >
-                        コピー
-                      </button>
-                    </div>
-                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{detailedSummary}</p>
-                  </div>
-                )}
-              </div>
+          {loading && (
+            <div className="mt-6 text-center py-8">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-100 border-t-indigo-500 mb-2"></div>
+              <p className="text-indigo-600 font-medium animate-pulse">
+                3つのプラットフォーム用に書き分けています...
+              </p>
+            </div>
+          )}
 
-              <div>
-                <AmazonProductShowcase
-                  keywords={amazonKeywords}
-                  products={amazonProducts}
-                  isLoading={amazonLoading}
-                  error={amazonError}
-                  partnerTag={process.env.NEXT_PUBLIC_AMAZON_PARTNER_TAG}
-                />
-              </div>
+          {error && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-100 text-red-600 rounded-lg text-sm">
+              🚨 {error}
             </div>
           )}
         </div>
+
+        {/* 結果表示エリア */}
+        {summaries && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* 左カラム：要約結果 */}
+            <div className="lg:col-span-2 space-y-6">
+              
+              {/* X (Twitter) */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="bg-slate-900 px-4 py-3 flex justify-between items-center">
+                  <h3 className="text-white font-bold flex items-center gap-2">
+                    <span className="text-lg">𝕏</span> 
+                    <span className="text-xs font-normal text-slate-400">130文字以内</span>
+                  </h3>
+                  <button onClick={() => handleCopy(summaries.twitter)} className="text-xs bg-slate-700 text-white px-3 py-1 rounded hover:bg-slate-600 transition-colors">コピー</button>
+                </div>
+                <div className="p-5">
+                  <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{summaries.twitter}</p>
+                </div>
+              </div>
+
+              {/* Threads */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="bg-black px-4 py-3 flex justify-between items-center">
+                  <h3 className="text-white font-bold flex items-center gap-2">
+                    <span>@ Threads</span>
+                    <span className="text-xs font-normal text-gray-400">480文字以内</span>
+                  </h3>
+                  <button onClick={() => handleCopy(summaries.threads)} className="text-xs bg-gray-800 text-white px-3 py-1 rounded hover:bg-gray-700 transition-colors">コピー</button>
+                </div>
+                <div className="p-5">
+                  <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{summaries.threads}</p>
+                </div>
+              </div>
+
+              {/* note */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="bg-[#41c9b4] px-4 py-3 flex justify-between items-center">
+                  <h3 className="text-white font-bold flex items-center gap-2">
+                    <span>note</span>
+                    <span className="text-xs font-normal text-white/80">詳細要約</span>
+                  </h3>
+                  <button onClick={() => handleCopy(summaries.note)} className="text-xs bg-[#2da896] text-white px-3 py-1 rounded hover:bg-[#238c7d] transition-colors">コピー</button>
+                </div>
+                <div className="p-5">
+                  <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{summaries.note}</p>
+                </div>
+              </div>
+
+            </div>
+
+            {/* 右カラム：登録リンク（広告） */}
+            <div className="lg:col-span-1">
+               <AmazonProductShowcase
+                  keywords={amazonKeywords} // note要約から抽出したキーワード
+                  products={amazonProducts}
+                  isLoading={amazonLoading}
+                  error={amazonError}
+                  partnerTag=""
+                />
+            </div>
+          </div>
+        )}
       </main>
 
-      <footer className="bg-gray-800 text-white py-6 mt-auto">
-        <div className="container mx-auto px-4 text-center">
-          <p className="text-sm">© 2024 AI記事要約.com - Powered by Gemini AI</p>
+      <footer className="bg-slate-900 text-slate-400 py-8 mt-auto">
+        <div className="container mx-auto px-4 text-center text-sm">
+          <p>© 2025 AI記事要約.com</p>
         </div>
       </footer>
 
