@@ -1,4 +1,4 @@
-// /app/components/AmazonProductShowcase.tsx ver.6
+// /app/components/AmazonProductShowcase.tsx ver.6 fixed
 "use client";
 
 import Image from "next/image";
@@ -78,7 +78,7 @@ export default function AmazonProductShowcase({ products, isLoading }: ProductSh
       ) : (
         <div className="grid grid-cols-1 gap-4">
           {products.map((product) => (
-            
+            <a
               key={product.asin}
               href={product.url}
               target="_blank"
