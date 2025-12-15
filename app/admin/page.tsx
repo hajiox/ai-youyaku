@@ -1,4 +1,4 @@
-// /app/admin/page.tsx ver.2
+// /app/admin/page.tsx ver.3 (パスワード認証付き)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -13,11 +13,13 @@ type RegisteredLink = {
 };
 
 export default function AdminPage() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
   const [links, setLinks] = useState<RegisteredLink[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
-  // 新規登録用のステート
   const [newUrl, setNewUrl] = useState('');
   const [fetchingOgp, setFetchingOgp] = useState(false);
   const [ogpData, setOgpData] = useState<{
@@ -27,10 +29,37 @@ export default function AdminPage() {
   } | null>(null);
 
   useEffect(() => {
-    fetchLinks();
+    const auth = sessionStorage.getItem('admin_auth');
+    if (auth === 'true') {
+      setIsAuthenticated(true);
+      fetchLinks();
+    }
   }, []);
 
+  const handleLogin = async () => {
+    setAuthError('');
+    
+    try {
+      const res = await fetch('/api/admin-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+
+      if (res.ok) {
+        sessionStorage.setItem('admin_auth', 'true');
+        setIsAuthenticated(true);
+        fetchLinks();
+      } else {
+        setAuthError('パスワードが正しくありません');
+      }
+    } catch (e) {
+      setAuthError('認証エラーが発生しました');
+    }
+  };
+
   const fetchLinks = async () => {
+    setLoading(true);
     try {
       const res = await fetch('/api/registered-links');
       const data = await res.json();
@@ -134,6 +163,45 @@ export default function AdminPage() {
     }
   };
 
+  // ログイン画面
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
+          <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">管理画面ログイン</h1>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">パスワード</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                placeholder="パスワードを入力"
+              />
+            </div>
+
+            {authError && (
+              <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-md text-sm">
+                {authError}
+              </div>
+            )}
+
+            <button
+              onClick={handleLogin}
+              className="w-full py-3 bg-indigo-600 text-white rounded-md font-medium hover:bg-indigo-700 transition"
+            >
+              ログイン
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // メイン画面（認証後）
   if (loading) return <div className="p-8 text-center">読み込み中...</div>;
 
   return (
