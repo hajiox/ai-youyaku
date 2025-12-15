@@ -1,125 +1,79 @@
-// /lib/buildMessages.ts ver.3 - Gemini対応版
+// /lib/buildMessages.ts ver.4 - 3プラットフォーム対応版
 
 import type { ChatCompletionRequestMessage } from 'openai'
 
 /**
- * OpenAI用のメッセージ構築（既存）
+ * OpenAI用のメッセージ構築（使用していない場合は削除しても良いですが互換性のため残します）
  */
 export function buildMessages(
   tone: 'custom' | 'formal' | 'casual',
   articleContent: string,
   toneSample?: string
 ): ChatCompletionRequestMessage[] {
-  // 既存のコード（変更なし）
-  let messages: ChatCompletionRequestMessage[]
-
-  if (tone === 'custom' && toneSample?.length > 0) {
-    messages = [
-      {
-        role: 'system',
-        content: `あなたはプロの文体模倣AIです。\n以下はユーザーが実際に書いた投稿文です。この文体・語彙・思考パターンを真似て、次の文章を「同じ口調」で要約してください。\n\n--- サンプル ---\n${toneSample}\n------------------\n\n要約対象は以下です。`,
-      },
-      {
-        role: 'user',
-        content: articleContent,
-      },
-    ]
-  } else if (tone === 'formal') {
-    messages = [
-      {
-        role: 'system',
-        content: 'あなたは論理的で客観的な要約を行うAIです。ビジネス文書や学術的資料に適したフォーマルな文体で要約してください。',
-      },
-      {
-        role: 'user',
-        content: articleContent,
-      },
-    ]
-  } else {
-    messages = [
-      {
-        role: 'system',
-        content: 'あなたは親しみやすくカジュアルな文体で要約するAIです。友人に説明するようなノリで要約してください。',
-      },
-      {
-        role: 'user',
-        content: articleContent,
-      },
-    ]
-  }
-
-  return messages
+  return [
+    {
+      role: 'system',
+      content: 'あなたはプロの要約AIです。',
+    },
+    {
+      role: 'user',
+      content: articleContent,
+    },
+  ]
 }
 
 /**
- * Gemini用のプロンプト構築（新規追加）
+ * Gemini用のプロンプト構築（JSON出力対応）
  */
 export function buildMessagesForGemini(
   tone: 'custom' | 'formal' | 'casual',
   articleContent: string,
-  targetLengthDescription: string,
   toneSample?: string
 ): string {
-  let prompt: string
+  let toneInstruction = "";
 
   if (tone === 'custom' && toneSample && toneSample.length > 0) {
-    // カスタム口調の場合
-    prompt = `あなたは優秀な文体模倣AIです。
+    toneInstruction = `
+【重要：文体模倣】
+以下の「ユーザーの文体サンプル」を分析し、その語彙、リズム、言い回し、絵文字の使い方を**完全に模倣**して要約を作成してください。
+内容や事実は記事に基づきますが、"喋り方"はこのユーザーになりきってください。
 
-【タスク】
-以下の記事を要約してください。その際、ユーザーの文体サンプルを完全に模倣してください。
-
-【ユーザーの文体サンプル】
+[ユーザーの文体サンプル]
 ${toneSample}
-
-【重要な模倣ポイント】
-- 上記サンプルの語尾（です/ます、だ/である等）を同じ頻度で使用
-- 句読点の使い方を完全に真似る
-- 感情表現（！、〜等）の頻度を同じにする
-- サンプルで使われている言葉のレベルを維持
-
-【要約する記事】
-${articleContent}
-
-【要約の条件】
-- ${targetLengthDescription}要約を日本語で作成
-- ユーザーの口調を完全に再現
-- 内容は正確に、でも口調はユーザーそっくりに
-
-要約：`;
-
+`;
   } else if (tone === 'formal') {
-    // フォーマルな口調
-    prompt = `以下の記事を、ビジネス文書や学術的資料に適したフォーマルな文体で要約してください。
-
-【要約する記事】
-${articleContent}
-
-【要約の条件】
-- ${targetLengthDescription}要約を日本語で作成
-- 「です・ます」調を使用
-- 専門用語は適切に使用し、必要に応じて簡潔な説明を追加
-- 感情的な表現は避け、事実に基づいた記述
-- 論理的で客観的な文体
-
-要約：`;
-
+    toneInstruction = `
+【文体指定：フォーマル】
+ビジネス文書や日報に適した、論理的で客観的な「です・ます」調で作成してください。
+感情的な表現は避け、事実を端的に伝えてください。
+`;
   } else {
-    // カジュアルな口調（デフォルト）
-    prompt = `以下の記事を、友達に説明するようなカジュアルで親しみやすい文体で要約してください。
-
-【要約する記事】
-${articleContent}
-
-【要約の条件】
-- ${targetLengthDescription}要約を日本語で作成
-- 「〜だよね」「〜かな」など、親しみやすい語尾を使用
-- 難しい専門用語は噛み砕いて説明
-- 「！」や「〜」を適度に使って感情を表現
-- 読みやすく、フレンドリーな雰囲気
-
-要約：`;
+    toneInstruction = `
+【文体指定：カジュアル】
+友人にLINEやSNSでシェアするような、親しみやすい「ため口（〜だね、〜だよ）」や「ですます（柔らかめ）」を混ぜた文体にしてください。
+適度に絵文字を使い、堅苦しくない雰囲気にしてください。
+`;
   }
 
-  return prompt
+  // プロンプト本文
+  return `
+あなたは優秀なSNS運用アシスタントAIです。
+以下の記事を読み、指定された文体で、3つのプラットフォーム（X, Threads, note）に最適な長さの要約を作成してください。
+
+${toneInstruction}
+
+【要約対象の記事】
+${articleContent}
+
+【出力フォーマット】
+以下のキーを持つ **純粋なJSONデータのみ** を出力してください。Markdownのコードブロック（\`\`\`jsonなど）は不要です。
+
+{
+  "twitter": "X（旧Twitter）用の要約。130文字以内。ハッシュタグを2つ程度含む。結論を最初に。",
+  "threads": "Threads用の要約。480文字以内。箇条書きを活用し、読みやすく構造化する。",
+  "note": "note用の詳細要約。1500文字以内。見出しや箇条書きを使い、記事の全体像、重要なポイント、結論を網羅する。"
+}
+
+必ず正しいJSON形式で出力してください。
+`;
 }
