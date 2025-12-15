@@ -1,4 +1,6 @@
-// /app/components/AmazonProductShowcase.tsx ver.2 (登録リンク対応版)
+// /app/components/AmazonProductShowcase.tsx ver.2
+"use client";
+
 import Image from "next/image";
 import { useMemo, useState } from "react";
 
@@ -51,12 +53,10 @@ const renderStars = (rating?: number) => {
   );
 };
 
-// 画像表示を管理する個別のコンポーネント（エラーハンドリング用）
 const ProductImage = ({ product }: { product: AmazonProduct }) => {
   const [imgSrc, setImgSrc] = useState<string | undefined>(product.imageUrl);
   const [hasError, setHasError] = useState(false);
 
-  // 画像URLがない、またはロードエラーが発生した場合のフォールバック表示
   if (!imgSrc || hasError) {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center bg-slate-50 text-slate-400">
@@ -74,10 +74,9 @@ const ProductImage = ({ product }: { product: AmazonProduct }) => {
       className="object-contain p-3 transition duration-300 group-hover:scale-105"
       sizes="(max-width: 1024px) 50vw, 280px"
       onError={() => {
-        // 画像の読み込みに失敗したらエラー状態にする
         setHasError(true);
       }}
-      unoptimized // 外部URLの画像を最適化せずに表示
+      unoptimized
     />
   );
 };
@@ -162,7 +161,6 @@ const AmazonProductShowcase = ({
               className="group flex h-full flex-col overflow-hidden rounded-xl border border-white/80 bg-white/80 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
             >
               <div className="relative h-48 w-full overflow-hidden bg-white">
-                {/* エラーハンドリング機能付きの画像コンポーネント */}
                 <ProductImage product={product} />
               </div>
 
@@ -207,7 +205,6 @@ const AmazonProductShowcase = ({
                   </div>
                 )}
 
-                {/* 登録リンクの場合は「詳しく見る」、Amazonの場合は「Amazonで見る」 */}
                 <div className="mt-auto pt-4">
                   
                     href={product.url}
