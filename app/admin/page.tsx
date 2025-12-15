@@ -38,15 +38,30 @@ export default function AdminPage() {
   const fetchProducts = async () => {
     try {
       const res = await fetch('/api/manual-products');
+      if (!res.ok) {
+        throw new Error('failed to fetch');
+      }
+
       const data = await res.json();
+
       if (data.products && data.products.length > 0) {
-        setProducts(data.products);
+        const normalized = data.products.map((p: any, idx: number) => ({
+          id: p.id || '',
+          title: p.title || '',
+          description: p.description || '',
+          url: p.url || '',
+          image_url: p.image_url || '',
+          sort_order: p.sort_order ?? idx + 1,
+        }));
+
+        setProducts(normalized);
       } else {
         setProducts([1, 2, 3, 4].map((order) => createEmptyProduct(order)));
       }
     } catch (e) {
       console.error(e);
       setMessage({ text: 'データの読み込みに失敗しました', type: 'error' });
+      setProducts([1, 2, 3, 4].map((order) => createEmptyProduct(order)));
     } finally {
       setLoading(false);
     }
@@ -124,7 +139,12 @@ export default function AdminPage() {
       const res = await fetch('/api/manual-products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ products }),
+        body: JSON.stringify({
+          products: products.map((p, idx) => ({
+            ...p,
+            sort_order: p.sort_order ?? idx + 1,
+          })),
+        }),
       });
 
       if (res.ok) {
