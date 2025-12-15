@@ -172,7 +172,10 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-4">
-          <h1 className="text-2xl font-bold text-gray-800">商品管理画面 (Manual Override)</h1>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-indigo-500 font-semibold">Manual Override</p>
+            <h1 className="text-2xl font-bold text-gray-800">商品管理画面</h1>
+          </div>
           <button
             onClick={handleSave}
             disabled={saving}
@@ -182,7 +185,10 @@ export default function AdminPage() {
           </button>
         </div>
 
-        <div className="mb-6 text-right">
+        <div className="mb-6 flex justify-between items-center">
+          <p className="text-sm text-gray-600">
+            LPのURLを貼り付けると、OGPタイトルと説明文が自動入力されます。価格や画像は不要です。
+          </p>
           <button
             type="button"
             onClick={handleAddProduct}
@@ -201,64 +207,71 @@ export default function AdminPage() {
         <div className="grid gap-6">
           {products.map((product, index) => (
             <div key={product.id || index} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4 border-b pb-2">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b pb-4">
                 <div>
                   <p className="text-xs text-gray-400">枠番号 {product.sort_order}</p>
                   <h2 className="text-lg font-semibold text-gray-800">LP設定</h2>
+                  {product.id && <p className="mt-1 text-xs text-gray-500">ID: {product.id}</p>}
                 </div>
-                <div className="flex items-center gap-2 text-xs text-gray-400">
-                  {product.id && <span className="px-2 py-1 bg-gray-100 rounded">ID: {product.id}</span>}
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+                    URL入力でOGP自動取得
+                  </span>
                   <button
                     onClick={() => handleDeleteProduct(index)}
-                    className="text-red-600 hover:text-red-700 font-semibold"
+                    className="flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-3 py-1 text-sm font-semibold text-red-600 transition hover:bg-red-100"
                   >
-                    削除
+                    <span aria-hidden>🗑️</span> 削除
                   </button>
                 </div>
               </div>
 
-              <div className="space-y-5">
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">LPのURL (入力で自動取得)</label>
+              <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-3">
+                <div className="space-y-3 md:col-span-1">
+                  <label className="block text-sm font-medium text-gray-700">LPのURL</label>
                   <input
                     type="text"
                     value={product.url}
                     onChange={(e) => handleUrlChange(index, e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-indigo-500"
                     placeholder="https://example.com/..."
                   />
-                  <p className="text-xs text-gray-500">URLを貼り付けるとOGPタイトルと説明文が自動入力されます。</p>
+                  <p className="text-xs text-gray-500">
+                    貼り付け後に自動でOGPタイトルと説明文を取得します。
+                  </p>
                   {metadataLoadingIndex === index && (
-                    <p className="text-xs text-indigo-600">OGP情報を取得中...</p>
+                    <p className="text-xs font-semibold text-indigo-600">OGP情報を取得中...</p>
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">タイトル</label>
-                    <input
-                      type="text"
-                      value={product.title}
-                      onChange={(e) => handleChange(index, 'title', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-                      placeholder="OGPから自動入力されます"
-                    />
+                <div className="space-y-3 md:col-span-2">
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700">OGPタイトル</label>
+                      <input
+                        type="text"
+                        value={product.title}
+                        onChange={(e) => handleChange(index, 'title', e.target.value)}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-indigo-500"
+                        placeholder="OGPから自動入力されます"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700">OGP説明文</label>
+                      <textarea
+                        value={product.description}
+                        onChange={(e) => handleChange(index, 'description', e.target.value)}
+                        rows={3}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-indigo-500"
+                        placeholder="OGPから自動入力されます"
+                      />
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">説明文</label>
-                    <textarea
-                      value={product.description}
-                      onChange={(e) => handleChange(index, 'description', e.target.value)}
-                      rows={2}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-                      placeholder="OGPから自動入力されます"
-                    />
+                  <div className="rounded-lg bg-indigo-50 border border-indigo-100 p-4 text-sm text-indigo-800">
+                    OGPで取得できない場合は上書き入力してください。価格や画像URLは管理不要です。
                   </div>
-                </div>
-
-                <div className="rounded-lg bg-indigo-50 border border-indigo-100 p-4 text-sm text-indigo-800">
-                  自動取得で足りない場合は、タイトルと説明文を直接編集してください。OGP画像や価格入力は不要です。
                 </div>
               </div>
             </div>
