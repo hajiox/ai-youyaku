@@ -1,4 +1,4 @@
-// /app/api/summary/route.ts ver.12 - 3プラットフォーム一括生成版
+// /app/api/summary/route.ts ver.13 - 3プラットフォーム一括生成版 (Gemini 2.5 Flash-Lite対応)
 import { NextResponse } from "next/server";
 import { buildMessagesForGemini } from "@/lib/buildMessages";
 
@@ -25,8 +25,9 @@ async function fetchUrlContent(url: string): Promise<{
     }
 
     const contentType = response.headers.get("content-type");
-    if (!contentType || (!contentType.includes("text/html") && !contentType.includes("text/plain"))) {
-       // HTMLでもテキストでもない場合はエラー回避のためテキストとして扱うか、処理をスキップ
+    // HTMLでもテキストでもない場合のチェック（必要に応じて強化）
+    if (contentType && !contentType.includes("text/html") && !contentType.includes("text/plain")) {
+       console.log(`Skipping non-text content: ${contentType}`);
     }
 
     let text = await response.text();
@@ -62,11 +63,13 @@ async function fetchUrlContent(url: string): Promise<{
 // Gemini API呼び出し関数
 async function callGeminiAPI(prompt: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("API Key未設定");
+  if (!apiKey) throw new Error("GEMINI_API_KEY環境変数が設定されていません");
 
-  // モデル名を修正 (gemini-2.5-flash-lite は存在しない可能性が高いため、安定版を使用)
-  const modelName = 'gemini-1.5-flash';
+  // モデル名を指定（gemini-2.5-flash-lite）
+  const modelName = 'gemini-2.5-flash-lite';
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+  console.log(`Using Gemini model: ${modelName}`);
 
   const response = await fetch(apiUrl, {
     method: 'POST',
@@ -75,15 +78,22 @@ async function callGeminiAPI(prompt: string): Promise<string> {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.7,
-        response_mime_type: "application/json", // JSONモードを強制
+        response_mime_type: "application/json", // JSON出力を強制
       }
     }),
   });
 
   if (!response.ok) {
-    const err = await response.text();
-    console.error("Gemini Error:", err);
-    throw new Error(`AIエラー: ${response.status}`);
+    const errorText = await response.text();
+    console.error(`Gemini API error:`, response.status, errorText);
+    
+    if (response.status === 404) {
+      throw new Error(`モデル (${modelName}) が見つかりません。APIキーがVertex AIまたはAI Studioで有効か確認してください。`);
+    }
+    if (response.status === 429) {
+      throw new Error(`AIの利用制限（レートリミット）に達しました。`);
+    }
+    throw new Error(`AIサービスの呼び出しに失敗しました (${response.status})`);
   }
 
   const data = await response.json();
@@ -106,7 +116,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: fetchResult.error }, { status: 500 });
     }
 
-    // 2. プロンプト作成
+    // 2. プロンプト作成（3プラットフォーム用）
     let prompt = buildMessagesForGemini(tone, fetchResult.content, toneSample);
     if (fetchResult.truncated) {
       prompt = `（記事が長いため冒頭${MAX_INPUT_CHAR_LENGTH}文字のみ使用）\n${prompt}`;
@@ -123,6 +133,7 @@ export async function POST(req: Request) {
       result = JSON.parse(cleanJson);
     } catch (e) {
       console.error("JSON Parse Error:", e);
+      // 万が一JSONパースに失敗した場合のフォールバックは今回は省略しエラーとする
       return NextResponse.json({ error: "AIの応答形式が不正でした" }, { status: 500 });
     }
 
