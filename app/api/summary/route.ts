@@ -1,4 +1,4 @@
-// /app/api/summary/route.ts ver.13 - 3プラットフォーム一括生成版 (Gemini 2.5 Flash-Lite対応)
+// /app/api/summary/route.ts ver.14 - モデルをgemini-1.5-flashに変更（制限回避＆3つ一括版）
 import { NextResponse } from "next/server";
 import { buildMessagesForGemini } from "@/lib/buildMessages";
 
@@ -25,7 +25,7 @@ async function fetchUrlContent(url: string): Promise<{
     }
 
     const contentType = response.headers.get("content-type");
-    // HTMLでもテキストでもない場合のチェック（必要に応じて強化）
+    // HTMLでもテキストでもない場合のチェック
     if (contentType && !contentType.includes("text/html") && !contentType.includes("text/plain")) {
        console.log(`Skipping non-text content: ${contentType}`);
     }
@@ -65,8 +65,8 @@ async function callGeminiAPI(prompt: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY環境変数が設定されていません");
 
-  // モデル名を指定（gemini-2.5-flash-lite）
-  const modelName = 'gemini-2.5-flash-lite';
+  // 【修正】制限の緩い安定版モデルに変更（無料枠で安定動作）
+  const modelName = 'gemini-1.5-flash';
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
   console.log(`Using Gemini model: ${modelName}`);
@@ -88,10 +88,10 @@ async function callGeminiAPI(prompt: string): Promise<string> {
     console.error(`Gemini API error:`, response.status, errorText);
     
     if (response.status === 404) {
-      throw new Error(`モデル (${modelName}) が見つかりません。APIキーがVertex AIまたはAI Studioで有効か確認してください。`);
+      throw new Error(`モデル (${modelName}) が見つかりません。APIキーの設定を確認してください。`);
     }
     if (response.status === 429) {
-      throw new Error(`AIの利用制限（レートリミット）に達しました。`);
+      throw new Error(`AIの利用制限（レートリミット）に達しました。しばらく待ってから再試行してください。`);
     }
     throw new Error(`AIサービスの呼び出しに失敗しました (${response.status})`);
   }
@@ -133,7 +133,6 @@ export async function POST(req: Request) {
       result = JSON.parse(cleanJson);
     } catch (e) {
       console.error("JSON Parse Error:", e);
-      // 万が一JSONパースに失敗した場合のフォールバックは今回は省略しエラーとする
       return NextResponse.json({ error: "AIの応答形式が不正でした" }, { status: 500 });
     }
 
