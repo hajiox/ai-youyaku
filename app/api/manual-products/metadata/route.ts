@@ -4,8 +4,23 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 const extractMetaContent = (html: string, property: string): string | undefined => {
-  const regex = new RegExp(`<meta[^>]+property=["']${property}["'][^>]+content=["']([^"']+)["']`, "i");
-  const match = html.match(regex);
+  const propertyRegex = new RegExp(
+    `<meta[^>]+property=["']${property}["'][^>]+content=["']([^"']+)["']`,
+    "i",
+  );
+  const nameRegex = new RegExp(
+    `<meta[^>]+name=["']${property}["'][^>]+content=["']([^"']+)["']`,
+    "i",
+  );
+
+  const byProperty = html.match(propertyRegex)?.[1];
+  if (byProperty) return byProperty;
+
+  return html.match(nameRegex)?.[1];
+};
+
+const extractTitleTag = (html: string): string | undefined => {
+  const match = html.match(/<title>([^<]+)<\/title>/i);
   return match?.[1];
 };
 
@@ -69,10 +84,12 @@ export async function GET(req: NextRequest) {
 
     const html = await response.text();
 
-    const ogTitle = extractMetaContent(html, "og:title");
+    const ogTitle = extractMetaContent(html, "og:title") || extractTitleTag(html);
     const ogImage = extractMetaContent(html, "og:image");
     const ogPrice = extractMetaContent(html, "og:price:amount");
     const ogCurrency = extractMetaContent(html, "og:price:currency");
+    const ogDescription =
+      extractMetaContent(html, "og:description") || extractMetaContent(html, "description");
 
     const productJsonLd = extractJsonLdProduct(html);
 
@@ -86,6 +103,7 @@ export async function GET(req: NextRequest) {
       imageUrl: typeof image === "string" ? image : Array.isArray(image) ? image[0] : undefined,
       price: formatPrice(price, currency),
       currency: currency || undefined,
+      description: typeof ogDescription === "string" ? ogDescription : undefined,
     });
   } catch (error) {
     console.error("Product metadata fetch failed", error);

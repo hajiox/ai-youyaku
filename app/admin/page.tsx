@@ -17,6 +17,7 @@ export default function AdminPage() {
   const [products, setProducts] = useState<ManualProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [metadataLoadingIndex, setMetadataLoadingIndex] = useState<number | null>(null);
   const [message, setMessage] = useState({ text: '', type: '' });
 
   const createEmptyProduct = (order: number): ManualProduct => ({
@@ -56,6 +57,52 @@ export default function AdminPage() {
     const newProducts = [...products];
     newProducts[index] = { ...newProducts[index], [field]: value };
     setProducts(newProducts);
+  };
+
+  const fetchMetadata = async (index: number, targetUrl: string) => {
+    if (!targetUrl) return;
+
+    setMetadataLoadingIndex(index);
+    setMessage({ text: '', type: '' });
+
+    try {
+      const res = await fetch(`/api/manual-products/metadata?url=${encodeURIComponent(targetUrl)}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'メタデータ取得に失敗しました');
+      }
+
+      setProducts((prev) => {
+        const next = [...prev];
+        const current = next[index];
+
+        if (!current) return prev;
+
+        next[index] = {
+          ...current,
+          title: current.title || data.title || '',
+          description: current.description || data.description || '',
+          image_url: current.image_url || data.imageUrl || '',
+          price: current.price || data.price || '',
+          url: current.url || targetUrl,
+        };
+
+        return next;
+      });
+
+      setMessage({ text: '🔍 OGP情報を自動取得しました', type: 'success' });
+    } catch (error) {
+      console.error(error);
+      setMessage({ text: 'OGPの取得に失敗しました。URLをご確認ください。', type: 'error' });
+    } finally {
+      setMetadataLoadingIndex(null);
+    }
+  };
+
+  const handleUrlBlur = (index: number, targetUrl: string) => {
+    if (!targetUrl) return;
+    void fetchMetadata(index, targetUrl);
   };
 
   const handleAddProduct = () => {
@@ -164,13 +211,14 @@ export default function AdminPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">AmazonリンクURL</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">商品・記事のURL</label>
                       <input
                         type="text"
                         value={product.url}
                         onChange={(e) => handleChange(index, 'url', e.target.value)}
+                        onBlur={(e) => handleUrlBlur(index, e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        placeholder="https://amazon.co.jp/..."
+                        placeholder="https://example.com/..."
                       />
                     </div>
                   </div>
@@ -179,15 +227,25 @@ export default function AdminPage() {
                 {/* 右側：画像設定とプレビュー */}
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      画像URL (Amazon画像を右クリック→コピー)
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        OGP画像URL (自動取得を推奨)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => fetchMetadata(index, product.url)}
+                        disabled={metadataLoadingIndex === index || !product.url}
+                        className="text-xs font-semibold text-indigo-700 hover:text-indigo-900 disabled:text-gray-400"
+                      >
+                        {metadataLoadingIndex === index ? '取得中...' : 'OGP自動取得'}
+                      </button>
+                    </div>
                     <input
                       type="text"
                       value={product.image_url}
                       onChange={(e) => handleChange(index, 'image_url', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                      placeholder="https://m.media-amazon.com/..."
+                      placeholder="https://example.com/ogp-image.jpg"
                     />
                   </div>
 
