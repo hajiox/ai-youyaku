@@ -1,48 +1,41 @@
-// /app/admin/page.tsx ver.1
+// /app/admin/page.tsx ver.2
 'use client';
 
 import { useState, useEffect } from 'react';
 
-type ManualProduct = {
+type RegisteredLink = {
   id: string;
+  url: string;
   title: string;
   description: string;
-  price: string;
-  url: string;
-  image_url: string;
-  sort_order: number;
+  ogp_image_url: string;
+  created_at: string;
 };
 
 export default function AdminPage() {
-  const [products, setProducts] = useState<ManualProduct[]>([]);
+  const [links, setLinks] = useState<RegisteredLink[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [metadataLoadingIndex, setMetadataLoadingIndex] = useState<number | null>(null);
   const [message, setMessage] = useState({ text: '', type: '' });
 
-  const createEmptyProduct = (order: number): ManualProduct => ({
-    id: '',
-    title: '',
-    description: '',
-    price: '',
-    url: '',
-    image_url: '',
-    sort_order: order,
-  });
+  // 新規登録用のステート
+  const [newUrl, setNewUrl] = useState('');
+  const [fetchingOgp, setFetchingOgp] = useState(false);
+  const [ogpData, setOgpData] = useState<{
+    title: string;
+    description: string;
+    ogp_image_url: string;
+  } | null>(null);
 
-  // 初期データ読み込み
   useEffect(() => {
-    fetchProducts();
+    fetchLinks();
   }, []);
 
-  const fetchProducts = async () => {
+  const fetchLinks = async () => {
     try {
-      const res = await fetch('/api/manual-products');
+      const res = await fetch('/api/registered-links');
       const data = await res.json();
-      if (data.products && data.products.length > 0) {
-        setProducts(data.products);
-      } else {
-        setProducts([1, 2, 3, 4].map((order) => createEmptyProduct(order)));
+      if (data.links) {
+        setLinks(data.links);
       }
     } catch (e) {
       console.error(e);
@@ -52,85 +45,92 @@ export default function AdminPage() {
     }
   };
 
-  // 入力内容の変更ハンドラ
-  const handleChange = (index: number, field: keyof ManualProduct, value: string) => {
-    const newProducts = [...products];
-    newProducts[index] = { ...newProducts[index], [field]: value };
-    setProducts(newProducts);
-  };
+  const handleFetchOgp = async () => {
+    if (!newUrl.trim()) {
+      setMessage({ text: 'URLを入力してください', type: 'error' });
+      return;
+    }
 
-  const fetchMetadata = async (index: number, targetUrl: string) => {
-    if (!targetUrl) return;
-
-    setMetadataLoadingIndex(index);
+    setFetchingOgp(true);
     setMessage({ text: '', type: '' });
 
     try {
-      const res = await fetch(`/api/manual-products/metadata?url=${encodeURIComponent(targetUrl)}`);
+      const res = await fetch('/api/fetch-ogp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: newUrl }),
+      });
+
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || 'メタデータ取得に失敗しました');
+        throw new Error(data.error || 'OGP取得に失敗しました');
       }
 
-      setProducts((prev) => {
-        const next = [...prev];
-        const current = next[index];
-
-        if (!current) return prev;
-
-        next[index] = {
-          ...current,
-          title: current.title || data.title || '',
-          description: current.description || data.description || '',
-          image_url: current.image_url || data.imageUrl || '',
-          price: current.price || data.price || '',
-          url: current.url || targetUrl,
-        };
-
-        return next;
+      setOgpData({
+        title: data.title || '',
+        description: data.description || '',
+        ogp_image_url: data.ogp_image_url || '',
       });
 
-      setMessage({ text: '🔍 OGP情報を自動取得しました', type: 'success' });
-    } catch (error) {
-      console.error(error);
-      setMessage({ text: 'OGPの取得に失敗しました。URLをご確認ください。', type: 'error' });
+      setMessage({ text: 'OGP情報を取得しました', type: 'success' });
+    } catch (e: any) {
+      console.error(e);
+      setMessage({ text: e.message || 'OGP取得に失敗しました', type: 'error' });
     } finally {
-      setMetadataLoadingIndex(null);
+      setFetchingOgp(false);
     }
   };
 
-  const handleUrlBlur = (index: number, targetUrl: string) => {
-    if (!targetUrl) return;
-    void fetchMetadata(index, targetUrl);
-  };
-
-  const handleAddProduct = () => {
-    setProducts((prev) => [...prev, createEmptyProduct(prev.length + 1)]);
-  };
-
-  // 保存処理
   const handleSave = async () => {
-    setSaving(true);
-    setMessage({ text: '', type: '' });
+    if (!ogpData) {
+      setMessage({ text: 'まずOGP情報を取得してください', type: 'error' });
+      return;
+    }
 
     try {
-      const res = await fetch('/api/manual-products', {
+      const res = await fetch('/api/registered-links', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ products }),
+        body: JSON.stringify({
+          url: newUrl,
+          ...ogpData,
+        }),
       });
 
-      if (res.ok) {
-        setMessage({ text: '✅ 保存しました！サイトに反映されます。', type: 'success' });
-      } else {
-        throw new Error('保存失敗');
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || '保存に失敗しました');
       }
-    } catch (e) {
+
+      setMessage({ text: '✅ 保存しました！', type: 'success' });
+      setNewUrl('');
+      setOgpData(null);
+      fetchLinks();
+    } catch (e: any) {
       console.error(e);
-      setMessage({ text: '保存に失敗しました', type: 'error' });
-    } finally {
-      setSaving(false);
+      setMessage({ text: e.message || '保存に失敗しました', type: 'error' });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('本当に削除しますか？')) return;
+
+    try {
+      const res = await fetch(`/api/registered-links?id=${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        throw new Error('削除に失敗しました');
+      }
+
+      setMessage({ text: '削除しました', type: 'success' });
+      fetchLinks();
+    } catch (e: any) {
+      console.error(e);
+      setMessage({ text: e.message || '削除に失敗しました', type: 'error' });
     }
   };
 
@@ -138,27 +138,8 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="text-2xl font-bold text-gray-800">商品管理画面 (Manual Override)</h1>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:bg-gray-400 transition shadow-md"
-          >
-            {saving ? '保存中...' : '全商品を保存'}
-          </button>
-        </div>
-
-        <div className="mb-6 text-right">
-          <button
-            type="button"
-            onClick={handleAddProduct}
-            className="px-4 py-2 text-sm font-semibold text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 border border-indigo-200"
-          >
-            ＋ 商品枠を追加
-          </button>
-        </div>
+      <div className="max-w-6xl mx-auto">
+        <h1 className="text-3xl font-bold text-gray-800 mb-8">リンク管理画面</h1>
 
         {message.text && (
           <div className={`mb-6 p-4 rounded-md ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
@@ -166,105 +147,130 @@ export default function AdminPage() {
           </div>
         )}
 
-        <div className="grid gap-6">
-          {products.map((product, index) => (
-            <div key={product.id || index} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4 border-b pb-2">
-                <h2 className="text-lg font-semibold text-gray-700">商品枠 #{product.sort_order}</h2>
-                <span className="text-xs text-gray-400">ID: {product.id}</span>
+        {/* 新規登録セクション */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+          <h2 className="text-xl font-semibold text-gray-700 mb-4">新規リンク登録</h2>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">URL</label>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={newUrl}
+                  onChange={(e) => setNewUrl(e.target.value)}
+                  placeholder="https://example.com"
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
+                />
+                <button
+                  onClick={handleFetchOgp}
+                  disabled={fetchingOgp}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 disabled:bg-gray-400 transition"
+                >
+                  {fetchingOgp ? '取得中...' : 'OGP取得'}
+                </button>
               </div>
+            </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* 左側：テキスト情報 */}
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">商品タイトル</label>
-                    <input
-                      type="text"
-                      value={product.title}
-                      onChange={(e) => handleChange(index, 'title', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-                      placeholder="例: 会津ブランド館 チャーシュー"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">説明文 (50文字以内推奨)</label>
-                    <textarea
-                      value={product.description}
-                      onChange={(e) => handleChange(index, 'description', e.target.value)}
-                      rows={2}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-                      placeholder="例: 秘伝のタレでじっくり煮込んだ自慢の逸品です。"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
+            {ogpData && (
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <h3 className="font-semibold text-gray-700 mb-3">取得したOGP情報</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-3">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">価格表示</label>
+                      <label className="block text-sm font-medium text-gray-600 mb-1">タイトル</label>
                       <input
                         type="text"
-                        value={product.price}
-                        onChange={(e) => handleChange(index, 'price', e.target.value)}
+                        value={ogpData.title}
+                        onChange={(e) => setOgpData({ ...ogpData, title: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        placeholder="例: ￥1,200"
                       />
                     </div>
+
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">商品・記事のURL</label>
-                      <input
-                        type="text"
-                        value={product.url}
-                        onChange={(e) => handleChange(index, 'url', e.target.value)}
-                        onBlur={(e) => handleUrlBlur(index, e.target.value)}
+                      <label className="block text-sm font-medium text-gray-600 mb-1">説明文</label>
+                      <textarea
+                        value={ogpData.description}
+                        onChange={(e) => setOgpData({ ...ogpData, description: e.target.value })}
+                        rows={3}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        placeholder="https://example.com/..."
                       />
                     </div>
                   </div>
-                </div>
 
-                {/* 右側：画像設定とプレビュー */}
-                <div className="space-y-4">
                   <div>
-                    <div className="flex items-center justify-between">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        OGP画像URL (自動取得を推奨)
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => fetchMetadata(index, product.url)}
-                        disabled={metadataLoadingIndex === index || !product.url}
-                        className="text-xs font-semibold text-indigo-700 hover:text-indigo-900 disabled:text-gray-400"
-                      >
-                        {metadataLoadingIndex === index ? '取得中...' : 'OGP自動取得'}
-                      </button>
-                    </div>
-                    <input
-                      type="text"
-                      value={product.image_url}
-                      onChange={(e) => handleChange(index, 'image_url', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                      placeholder="https://example.com/ogp-image.jpg"
-                    />
-                  </div>
-
-                  <div className="mt-2 border-2 border-dashed border-gray-200 rounded-lg h-40 flex items-center justify-center bg-gray-50 overflow-hidden relative">
-                    {product.image_url ? (
+                    <label className="block text-sm font-medium text-gray-600 mb-1">OGP画像</label>
+                    {ogpData.ogp_image_url ? (
                       <img 
-                        src={product.image_url} 
-                        alt="プレビュー" 
-                        className="h-full w-full object-contain"
+                        src={ogpData.ogp_image_url} 
+                        alt="OGP" 
+                        className="w-full h-40 object-cover rounded-md border"
                         onError={(e) => (e.currentTarget.style.display = 'none')}
                       />
                     ) : (
-                      <span className="text-gray-400 text-sm">画像URLを入力するとプレビューされます</span>
+                      <div className="w-full h-40 bg-gray-200 rounded-md flex items-center justify-center text-gray-400">
+                        画像なし
+                      </div>
                     )}
                   </div>
                 </div>
+
+                <button
+                  onClick={handleSave}
+                  className="mt-4 w-full py-3 bg-green-600 text-white rounded-md font-bold hover:bg-green-700 transition"
+                >
+                  この内容で保存
+                </button>
               </div>
+            )}
+          </div>
+        </div>
+
+        {/* 登録済みリンク一覧 */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-xl font-semibold text-gray-700 mb-4">登録済みリンク ({links.length}件)</h2>
+
+          {links.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">登録されているリンクはありません</p>
+          ) : (
+            <div className="grid gap-4">
+              {links.map((link) => (
+                <div key={link.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                  <div className="flex gap-4">
+                    {link.ogp_image_url && (
+                      <img 
+                        src={link.ogp_image_url} 
+                        alt={link.title}
+                        className="w-32 h-32 object-cover rounded-md"
+                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                      />
+                    )}
+                    
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-800 mb-1">{link.title}</h3>
+                      <p className="text-sm text-gray-600 mb-2">{link.description}</p>
+                      <a 
+                        href={link.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:underline break-all"
+                      >
+                        {link.url}
+                      </a>
+                    </div>
+
+                    <button
+                      onClick={() => handleDelete(link.id)}
+                      className="px-4 py-2 bg-red-100 text-red-600 rounded-md hover:bg-red-200 transition h-fit"
+                    >
+                      削除
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       </div>
     </div>
