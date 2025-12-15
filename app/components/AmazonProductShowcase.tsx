@@ -1,6 +1,4 @@
-// /app/components/AmazonProductShowcase.tsx ver.3 (シンプル版)
-"use client";
-
+// /app/components/AmazonProductShowcase.tsx ver.4
 import Image from "next/image";
 import { useState } from "react";
 
@@ -9,7 +7,7 @@ type Product = {
   title: string;
   url: string;
   imageUrl?: string;
-  source: 'registered-link';
+  source: string;
 };
 
 type ProductShowcaseProps = {
@@ -17,7 +15,7 @@ type ProductShowcaseProps = {
   isLoading: boolean;
 };
 
-const ProductImage = ({ product }: { product: Product }) => {
+function ProductImage({ product }: { product: Product }) {
   const [imgSrc, setImgSrc] = useState<string | undefined>(product.imageUrl);
   const [hasError, setHasError] = useState(false);
 
@@ -41,15 +39,15 @@ const ProductImage = ({ product }: { product: Product }) => {
       unoptimized
     />
   );
-};
+}
 
-const AmazonProductShowcase = ({ products, isLoading }: ProductShowcaseProps) => {
+export default function AmazonProductShowcase({ products, isLoading }: ProductShowcaseProps) {
   if (!isLoading && products.length === 0) {
     return null;
   }
 
   return (
-    <aside className="w-full rounded-2xl bg-gradient-to-br from-indigo-50 via-white to-blue-50 p-6 shadow-sm ring-1 ring-indigo-100/60">
+    <div className="w-full rounded-2xl bg-gradient-to-br from-indigo-50 via-white to-blue-50 p-6 shadow-sm ring-1 ring-indigo-100/60">
       <div className="mb-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
           おすすめコンテンツ
@@ -89,15 +87,7 @@ const AmazonProductShowcase = ({ products, isLoading }: ProductShowcaseProps) =>
               </div>
 
               <div className="flex flex-1 flex-col p-4">
-                <h3
-                  className="text-sm font-semibold leading-snug text-slate-700"
-                  style={{
-                    display: "-webkit-box",
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: "vertical",
-                    overflow: "hidden",
-                  }}
-                >
+                <h3 className="text-sm font-semibold leading-snug text-slate-700 line-clamp-2">
                   {product.title || "タイトル不明"}
                 </h3>
 
@@ -117,8 +107,6 @@ const AmazonProductShowcase = ({ products, isLoading }: ProductShowcaseProps) =>
           ))}
         </div>
       )}
-    </aside>
+    </div>
   );
-};
-
-export default AmazonProductShowcase;
+}
