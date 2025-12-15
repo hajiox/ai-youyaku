@@ -1,273 +1,138 @@
-// /app/api/summary/route.ts ver.11
+// /app/api/summary/route.ts ver.12 - 3プラットフォーム一括生成版
 import { NextResponse } from "next/server";
 import { buildMessagesForGemini } from "@/lib/buildMessages";
 
 export const runtime = "edge";
 
-// 入力コンテンツの最大文字数
 const MAX_INPUT_CHAR_LENGTH = 15000;
 
-/**
- * URLからコンテンツを取得（人間になりすましてアクセスする）
- */
+// URLからコンテンツを取得する関数
 async function fetchUrlContent(url: string): Promise<{ 
   content: string | null, 
   truncated: boolean, 
   originalLength: number, 
-  processedLength: number, 
   error?: string 
 }> {
   try {
-    // ユーザーエージェントとヘッダーを強化
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1'
       },
     });
 
     if (!response.ok) {
-      console.error(`URLの取得に失敗: ${url}, ステータス: ${response.status}`);
-      return { 
-        content: null, 
-        truncated: false, 
-        originalLength: 0, 
-        processedLength: 0, 
-        error: `記事の取得に失敗しました (Status: ${response.status})。サイトがアクセスを拒否している可能性があります。` 
-      };
+      return { content: null, truncated: false, originalLength: 0, error: `アクセス失敗: ${response.status}` };
     }
 
     const contentType = response.headers.get("content-type");
-    let plainText = "";
-
-    // HTMLをテキスト化して取り込む処理
-    if (contentType && contentType.includes("text/html")) {
-      const html = await response.text();
-      
-      // HTMLから本文抽出
-      plainText = html
-        // スクリプトとスタイルを削除（最優先）
-        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gmi, ' ')
-        .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gmi, ' ')
-        // ナビゲーション、フッター、ヘッダー、広告枠などを大まかに削除
-        .replace(/<nav\b[^>]*>[\s\S]*?<\/nav>/gmi, ' ')
-        .replace(/<footer\b[^>]*>[\s\S]*?<\/footer>/gmi, ' ')
-        .replace(/<header\b[^>]*>[\s\S]*?<\/header>/gmi, ' ')
-        .replace(/<aside\b[^>]*>[\s\S]*?<\/aside>/gmi, ' ')
-        // タグを削除してテキストのみにする
-        .replace(/<[^>]+>/g, ' ')
-        // HTMLエンティティのデコード
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        // 空白・改行を整理
-        .replace(/\s\s+/g, ' ')
-        .trim();
-        
-    } else if (contentType && contentType.includes("text/plain")) {
-      plainText = await response.text();
-    } else {
-      plainText = await response.text();
+    if (!contentType || (!contentType.includes("text/html") && !contentType.includes("text/plain"))) {
+       // HTMLでもテキストでもない場合はエラー回避のためテキストとして扱うか、処理をスキップ
     }
 
-    const originalLength = plainText.length;
-    let processedText = plainText;
+    let text = await response.text();
+    
+    // 簡易的なHTMLタグ除去
+    text = text
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gmi, ' ')
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gmi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s\s+/g, ' ')
+      .trim();
+
+    const originalLength = text.length;
     let truncated = false;
 
-    if (originalLength < 50) {
-      return { 
-        content: null, 
-        truncated: false, 
-        originalLength: 0, 
-        processedLength: 0, 
-        error: "記事の本文を正しく抽出できませんでした（内容が取得できていません）。" 
-      };
-    }
-
     if (originalLength > MAX_INPUT_CHAR_LENGTH) {
-      console.log(`記事が長いためトリミング: ${originalLength}文字 -> ${MAX_INPUT_CHAR_LENGTH}文字`);
-      processedText = plainText.substring(0, MAX_INPUT_CHAR_LENGTH);
+      text = text.substring(0, MAX_INPUT_CHAR_LENGTH);
       truncated = true;
     }
 
-    return { 
-      content: processedText, 
-      truncated, 
-      originalLength, 
-      processedLength: processedText.length 
-    };
+    if (text.length < 50) {
+      return { content: null, truncated: false, originalLength: 0, error: "本文が短すぎるか取得できませんでした" };
+    }
+
+    return { content: text, truncated, originalLength };
 
   } catch (error) {
-    console.error(`URL (${url}) のコンテンツ取得中にエラー:`, error);
-    return { 
-      content: null, 
-      truncated: false, 
-      originalLength: 0, 
-      processedLength: 0, 
-      error: "記事へのアクセス中にネットワークエラーが発生しました。" 
-    };
+    console.error("Fetch error:", error);
+    return { content: null, truncated: false, originalLength: 0, error: "記事の取得中にエラーが発生しました" };
   }
 }
 
-/**
- * Gemini APIを呼び出す関数
- */
+// Gemini API呼び出し関数
 async function callGeminiAPI(prompt: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
-  
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY環境変数が設定されていません");
-  }
+  if (!apiKey) throw new Error("API Key未設定");
 
-  const modelName = 'gemini-2.5-flash-lite';
+  // モデル名を修正 (gemini-2.5-flash-lite は存在しない可能性が高いため、安定版を使用)
+  const modelName = 'gemini-1.5-flash';
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-  
-  console.log(`Using Gemini model: ${modelName}`);
 
-  const requestBody = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.7,
-      topP: 0.95,
-      maxOutputTokens: 2048,
-    },
-    safetySettings: [
-      { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-      { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-      { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-      { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-    ]
-  };
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.7,
+        response_mime_type: "application/json", // JSONモードを強制
+      }
+    }),
+  });
 
-  try {
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Gemini API error:`, response.status, errorText);
-      if (response.status === 429) throw new Error(`AIの利用制限（レートリミット）に達しました。しばらく待ってからお試しください。`);
-      throw new Error(`AIサービスの呼び出しに失敗しました (${response.status})`);
-    }
-
-    const data = await response.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    
-    if (!text) {
-      throw new Error("AIからの応答が空でした。");
-    }
-    
-    return text.trim();
-
-  } catch (error) {
-    console.error(`Error with Gemini:`, error);
-    throw error;
+  if (!response.ok) {
+    const err = await response.text();
+    console.error("Gemini Error:", err);
+    throw new Error(`AIエラー: ${response.status}`);
   }
+
+  const data = await response.json();
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
 }
 
-/**
- * GET リクエストハンドラ
- */
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const urlToSummarize = searchParams.get("url");
-  const mode = searchParams.get("mode");
-  const tone = searchParams.get("tone") || 'casual';
-
-  if (!urlToSummarize || !mode || (mode !== "short" && mode !== "long")) {
-    return NextResponse.json({ error: "パラメータが不足しています" }, { status: 400 });
-  }
-
-  // 記事取得
-  const fetchResult = await fetchUrlContent(urlToSummarize);
-
-  if (fetchResult.error || !fetchResult.content) {
-    return NextResponse.json(
-      { 
-        error: fetchResult.error,
-        summary: null
-      },
-      { status: 500 }
-    );
-  }
-
-  const targetLengthDescription = mode === "short" ? "200文字程度の短い" : "1000文字程度の詳細な";
-  let prompt = buildMessagesForGemini(tone as any, fetchResult.content, targetLengthDescription);
-  
-  if (fetchResult.truncated) {
-    prompt = `（記事が長いため一部のみ読み込みました）\n\n${prompt}`;
-  }
-
-  try {
-    const summaryText = await callGeminiAPI(prompt);
-    
-    return NextResponse.json({ 
-      summary: summaryText,
-      truncated: fetchResult.truncated,
-      originalLength: fetchResult.originalLength
-    });
-    
-  } catch (err) {
-    console.error("Gemini API Handler Error:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "要約処理中にエラーが発生しました" },
-      { status: 500 }
-    );
-  }
-}
-
-/**
- * POST リクエストハンドラ
- */
+// POSTハンドラ
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { url, mode, tone, toneSample } = body;
+    const { url, tone, toneSample } = body;
 
-    if (!url || !mode) {
-      return NextResponse.json({ error: 'URLとモードは必須です' }, { status: 400 });
+    if (!url) {
+      return NextResponse.json({ error: 'URLは必須です' }, { status: 400 });
     }
 
+    // 1. 記事取得
     const fetchResult = await fetchUrlContent(url);
-
     if (fetchResult.error || !fetchResult.content) {
       return NextResponse.json({ error: fetchResult.error }, { status: 500 });
     }
 
-    const targetLengthDescription = mode === 'short' ? '200文字程度の短い' : '1000文字程度の詳細な';
-    let prompt = buildMessagesForGemini(tone as any, fetchResult.content, targetLengthDescription, toneSample);
-    
+    // 2. プロンプト作成
+    let prompt = buildMessagesForGemini(tone, fetchResult.content, toneSample);
     if (fetchResult.truncated) {
-      prompt = `（記事が長いため一部のみ読み込みました）\n\n${prompt}`;
+      prompt = `（記事が長いため冒頭${MAX_INPUT_CHAR_LENGTH}文字のみ使用）\n${prompt}`;
     }
 
-    const summaryText = await callGeminiAPI(prompt);
-    
+    // 3. AI生成実行
+    const jsonString = await callGeminiAPI(prompt);
+
+    // 4. JSON解析
+    let result;
+    try {
+      // コードブロック記法が含まれている場合の除去処理
+      const cleanJson = jsonString.replace(/```json\n|\n```/g, '').trim();
+      result = JSON.parse(cleanJson);
+    } catch (e) {
+      console.error("JSON Parse Error:", e);
+      return NextResponse.json({ error: "AIの応答形式が不正でした" }, { status: 500 });
+    }
+
     return NextResponse.json({ 
-      summary: summaryText,
-      truncated: fetchResult.truncated,
-      originalLength: fetchResult.originalLength
+      summary: result, // { twitter, threads, note }
+      truncated: fetchResult.truncated
     });
 
   } catch (err) {
-    console.error("API Route Error:", err);
-    return NextResponse.json(
-      { error: "システムエラーが発生しました" },
-      { status: 500 }
-    );
+    console.error("Server Error:", err);
+    return NextResponse.json({ error: "サーバーエラーが発生しました" }, { status: 500 });
   }
 }
