@@ -1,7 +1,7 @@
 // /app/admin/page.tsx ver.1
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 type ManualProduct = {
   id: string;
@@ -17,6 +17,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
+  const metadataTimers = useRef<Record<number, NodeJS.Timeout>>({});
 
   const createEmptyProduct = (order: number): ManualProduct => ({
     id: '',
@@ -56,6 +57,19 @@ export default function AdminPage() {
     const newProducts = [...products];
     newProducts[index] = { ...newProducts[index], [field]: value };
     setProducts(newProducts);
+
+    if (field === 'url') {
+      const trimmed = value.trim();
+      if (metadataTimers.current[index]) {
+        clearTimeout(metadataTimers.current[index]);
+      }
+
+      if (trimmed && /^https?:\/\//i.test(trimmed)) {
+        metadataTimers.current[index] = setTimeout(() => {
+          handleFetchMetadata(index);
+        }, 500);
+      }
+    }
   };
 
   const handleAddProduct = () => {
@@ -207,10 +221,10 @@ export default function AdminPage() {
                         disabled={metadataLoadingIndex === index}
                         className="px-4 py-2 text-sm font-semibold text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 border border-indigo-200 disabled:opacity-60"
                       >
-                        {metadataLoadingIndex === index ? '取得中...' : 'OGPを取得'}
+                        {metadataLoadingIndex === index ? '取得中...' : 'OGPを再取得'}
                       </button>
                     </div>
-                    <p className="text-xs text-gray-500">URLを入れて「OGPを取得」を押すとタイトル・説明・画像が自動入力されます。</p>
+                    <p className="text-xs text-gray-500">URLを入力すると自動でOGPタイトル・説明・画像を取り込みます。必要に応じて「OGPを再取得」で上書きできます。</p>
                   </div>
                 </div>
 

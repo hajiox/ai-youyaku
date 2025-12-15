@@ -43,7 +43,6 @@ export async function POST(req: Request) {
       id: p.id,
       title: p.title,
       description: p.description,
-      price: p.price,
       url: p.url,
       image_url: p.image_url,
       sort_order: p.sort_order,
