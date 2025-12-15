@@ -7,7 +7,6 @@ type ManualProduct = {
   id: string;
   title: string;
   description: string;
-  price: string;
   url: string;
   image_url: string;
   sort_order: number;
@@ -19,6 +18,17 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
+  const createEmptyProduct = (order: number): ManualProduct => ({
+    id: '',
+    title: '',
+    description: '',
+    url: '',
+    image_url: '',
+    sort_order: order,
+  });
+
+  const [metadataLoadingIndex, setMetadataLoadingIndex] = useState<number | null>(null);
+
   // 初期データ読み込み
   useEffect(() => {
     fetchProducts();
@@ -28,8 +38,10 @@ export default function AdminPage() {
     try {
       const res = await fetch('/api/manual-products');
       const data = await res.json();
-      if (data.products) {
+      if (data.products && data.products.length > 0) {
         setProducts(data.products);
+      } else {
+        setProducts([1, 2, 3, 4].map((order) => createEmptyProduct(order)));
       }
     } catch (e) {
       console.error(e);
@@ -44,6 +56,49 @@ export default function AdminPage() {
     const newProducts = [...products];
     newProducts[index] = { ...newProducts[index], [field]: value };
     setProducts(newProducts);
+  };
+
+  const handleAddProduct = () => {
+    setProducts((prev) => [...prev, createEmptyProduct(prev.length + 1)]);
+  };
+
+  const handleFetchMetadata = async (index: number) => {
+    const targetUrl = products[index]?.url;
+    if (!targetUrl) {
+      setMessage({ text: 'URLを入力してください', type: 'error' });
+      return;
+    }
+
+    setMetadataLoadingIndex(index);
+    setMessage({ text: '', type: '' });
+
+    try {
+      const res = await fetch(`/api/manual-products/metadata?url=${encodeURIComponent(targetUrl)}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'メタデータの取得に失敗しました');
+      }
+
+      setProducts((prev) => {
+        const updated = [...prev];
+        const current = updated[index];
+        updated[index] = {
+          ...current,
+          title: data.title || current.title,
+          description: data.description || current.description,
+          image_url: data.imageUrl || current.image_url,
+        };
+        return updated;
+      });
+
+      setMessage({ text: 'OGP情報を取り込みました', type: 'success' });
+    } catch (e) {
+      console.error(e);
+      setMessage({ text: 'OGP情報の取得に失敗しました', type: 'error' });
+    } finally {
+      setMetadataLoadingIndex(null);
+    }
   };
 
   // 保存処理
@@ -76,7 +131,7 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex justify-between items-center mb-4">
           <h1 className="text-2xl font-bold text-gray-800">商品管理画面 (Manual Override)</h1>
           <button
             onClick={handleSave}
@@ -84,6 +139,16 @@ export default function AdminPage() {
             className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:bg-gray-400 transition shadow-md"
           >
             {saving ? '保存中...' : '全商品を保存'}
+          </button>
+        </div>
+
+        <div className="mb-6 text-right">
+          <button
+            type="button"
+            onClick={handleAddProduct}
+            className="px-4 py-2 text-sm font-semibold text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 border border-indigo-200"
+          >
+            ＋ 商品枠を追加
           </button>
         </div>
 
@@ -126,42 +191,39 @@ export default function AdminPage() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">価格表示</label>
-                      <input
-                        type="text"
-                        value={product.price}
-                        onChange={(e) => handleChange(index, 'price', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        placeholder="例: ￥1,200"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">AmazonリンクURL</label>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">リンク先URL（自社LPなど）</label>
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
                       <input
                         type="text"
                         value={product.url}
                         onChange={(e) => handleChange(index, 'url', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        placeholder="https://amazon.co.jp/..."
+                        placeholder="https://example.com/lp"
                       />
+                      <button
+                        type="button"
+                        onClick={() => handleFetchMetadata(index)}
+                        disabled={metadataLoadingIndex === index}
+                        className="px-4 py-2 text-sm font-semibold text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 border border-indigo-200 disabled:opacity-60"
+                      >
+                        {metadataLoadingIndex === index ? '取得中...' : 'OGPを取得'}
+                      </button>
                     </div>
+                    <p className="text-xs text-gray-500">URLを入れて「OGPを取得」を押すとタイトル・説明・画像が自動入力されます。</p>
                   </div>
                 </div>
 
                 {/* 右側：画像設定とプレビュー */}
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      画像URL (Amazon画像を右クリック→コピー)
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">画像URL (OGP自動取得にも対応)</label>
                     <input
                       type="text"
                       value={product.image_url}
                       onChange={(e) => handleChange(index, 'image_url', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                      placeholder="https://m.media-amazon.com/..."
+                      placeholder="https://example.com/og-image.jpg"
                     />
                   </div>
 
