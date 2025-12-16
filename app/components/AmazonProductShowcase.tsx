@@ -1,4 +1,4 @@
-// /app/components/AmazonProductShowcase.tsx ver.6 fixed
+// /app/components/AmazonProductShowcase.tsx ver.7 - ヘッダー簡素化＆4カラム対応版
 "use client";
 
 import Image from "next/image";
@@ -9,97 +9,110 @@ type Product = {
   title: string;
   url: string;
   imageUrl?: string;
-  source: string;
+  price?: string;
+  amount?: number;
+  currency?: string;
+  rating?: number;
+  reviewCount?: number;
+  matchedKeywords?: string[];
+  source?: string;
 };
 
-type ProductShowcaseProps = {
+type AmazonProductShowcaseProps = {
+  keywords: string[];
   products: Product[];
   isLoading: boolean;
+  error: string | null;
+  partnerTag?: string;
 };
 
-function ProductImage({ product }: { product: Product }) {
-  const [imgSrc, setImgSrc] = useState<string | undefined>(product.imageUrl);
-  const [hasError, setHasError] = useState(false);
+// 画像読み込みエラーに対応するコンポーネント
+const ProductImage = ({ src, alt }: { src?: string; alt: string }) => {
+  const [imgError, setImgError] = useState(false);
 
-  if (!imgSrc || hasError) {
+  if (!src || imgError) {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center bg-slate-50 text-slate-400">
-        <span className="text-2xl">📷</span>
-        <span className="mt-2 text-xs font-medium">No Image</span>
+      <div className="w-full h-full bg-slate-200 flex items-center justify-center text-slate-400">
+        <span className="text-xs">No Image</span>
       </div>
     );
   }
 
   return (
     <Image
-      src={imgSrc}
-      alt={product.title}
+      src={src}
+      alt={alt}
       fill
-      className="object-contain p-3 transition duration-300 group-hover:scale-105"
-      sizes="(max-width: 1024px) 50vw, 280px"
-      onError={() => setHasError(true)}
-      unoptimized
+      className="object-cover transition-transform duration-300 group-hover:scale-105"
+      onError={() => setImgError(true)}
+      unoptimized // 外部画像の最適化をスキップ
     />
   );
-}
+};
 
-export default function AmazonProductShowcase({ products, isLoading }: ProductShowcaseProps) {
+export default function AmazonProductShowcase({
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  keywords,
+  products,
+  isLoading,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  error,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  partnerTag,
+}: AmazonProductShowcaseProps) {
+  
+  // ロード中、または商品がない場合は何も表示しない（スペースを空ける）
   if (!isLoading && products.length === 0) {
     return null;
   }
 
   return (
-    <div className="w-full rounded-2xl bg-gradient-to-br from-indigo-50 via-white to-blue-50 p-6 shadow-sm ring-1 ring-indigo-100/60">
-      <div className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
-          おすすめコンテンツ
-        </p>
-        <h2 className="text-xl font-bold text-slate-700">
-          関連サービス
-        </h2>
-        <p className="mt-1 text-xs text-slate-500">
-          要約内容に関連するサービスをご紹介します
-        </p>
+    <div className="w-full mt-8 mb-12">
+      {/* ★変更点: ヘッダーを「おすすめコンテンツ」のみに簡素化 */}
+      <div className="flex items-center gap-2 mb-6">
+        <div className="w-1 h-6 bg-indigo-600 rounded-full"></div>
+        <h2 className="text-xl font-bold text-slate-800">おすすめコンテンツ</h2>
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-4">
-          {Array.from({ length: 2 }).map((_, idx) => (
-            <div
-              key={idx}
-              className="flex animate-pulse flex-col rounded-xl border border-white/70 bg-white p-4 shadow-sm"
-            >
-              <div className="relative mb-3 h-40 w-full overflow-hidden rounded-lg bg-slate-100" />
-              <div className="h-4 w-3/4 rounded bg-slate-100" />
-              <div className="mt-2 h-3 w-1/2 rounded bg-slate-100" />
+        // ローディングスケルトン (PC: 4つ, スマホ: 2つ)
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-white rounded-lg border border-slate-200 p-4 h-64 animate-pulse">
+              <div className="w-full h-32 bg-slate-200 rounded mb-4"></div>
+              <div className="h-4 bg-slate-200 rounded w-3/4 mb-2"></div>
+              <div className="h-4 bg-slate-200 rounded w-1/2"></div>
             </div>
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4">
+        // 商品一覧 (レスポンシブ対応: スマホ1列/タブレット2列/PC4列)
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {products.map((product) => (
             <a
               key={product.asin}
               href={product.url}
               target="_blank"
-              rel="noopener noreferrer sponsored"
-              className="group flex flex-col overflow-hidden rounded-xl border border-white/70 bg-white shadow-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-md"
+              rel="noopener noreferrer"
+              className="group block bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1 h-full flex flex-col"
             >
-              <div className="relative h-48 w-full overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
-                <ProductImage product={product} />
+              {/* 画像エリア */}
+              <div className="relative w-full aspect-[1.91/1] overflow-hidden bg-slate-100">
+                <ProductImage src={product.imageUrl} alt={product.title} />
               </div>
-              
-              <div className="flex flex-col gap-3 p-4">
-                <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-slate-700 group-hover:text-indigo-600">
+
+              {/* テキストエリア */}
+              <div className="p-4 flex flex-col flex-grow">
+                <h3 className="font-bold text-slate-700 text-sm line-clamp-2 mb-2 group-hover:text-indigo-600 transition-colors">
                   {product.title}
                 </h3>
                 
-                <button className="mt-auto flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700">
-                  <span>詳しく見る</span>
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
+                <div className="mt-auto pt-2">
+                  <span className="text-xs font-medium text-indigo-500 flex items-center gap-1 group-hover:underline">
+                    詳しく見る 
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                  </span>
+                </div>
               </div>
             </a>
           ))}
