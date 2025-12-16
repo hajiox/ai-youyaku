@@ -1,10 +1,7 @@
-// /lib/buildMessages.ts ver.5 - 文体模倣強化版
+// /lib/buildMessages.ts ver.6 - 口調反映・サンドイッチ型プロンプト
 
 import type { ChatCompletionRequestMessage } from 'openai'
 
-/**
- * OpenAI用のメッセージ構築（互換性のために残存）
- */
 export function buildMessages(
   tone: 'custom' | 'formal' | 'casual',
   articleContent: string,
@@ -17,69 +14,68 @@ export function buildMessages(
 }
 
 /**
- * Gemini用のプロンプト構築（文体模倣最優先版）
+ * Gemini用のプロンプト構築（口調強制力強化版）
  */
 export function buildMessagesForGemini(
   tone: 'custom' | 'formal' | 'casual',
   articleContent: string,
   toneSample?: string
 ): string {
-  let roleDefinition = "";
-  let toneInstruction = "";
-  let styleEnforcement = "";
+  
+  // 1. 基本の役割定義
+  let prompt = `
+あなたは「要約AI」ではなく、特定の人物の「ゴーストライター」です。
+提供される記事の内容を元に、指定されたプラットフォーム（X, Threads, note）向けの投稿文を作成してください。
+`;
 
+  // 2. 記事コンテンツの配置
+  prompt += `
+【対象の記事テキスト】
+${articleContent}
+
+--------------------------------------------------
+`;
+
+  // 3. 口調指示（記事の直後に配置することで「上書き」を防ぐ）
   if (tone === 'custom' && toneSample && toneSample.length > 0) {
-    // カスタム口調（最優先）
-    roleDefinition = `あなたは以下の「サンプル文章」を書いた本人になりきってください（憑依してください）。AIとしてではなく、この人物として振る舞ってください。`;
-    toneInstruction = `
-【最重要：文体・人格の模倣】
-以下の「サンプル文章」を徹底的に分析し、語尾、口癖、絵文字の使用頻度、テンション、皮肉やユーモアのセンスまで、すべてを完コピしてください。
-「〜です・ます」や「〜だ・である」といった語尾の統一だけでなく、"その人らしさ"を再現してください。
+    prompt += `
+【⚠️最重要命令：文体コピー】
+ここからの指示が最も重要です。
+あなたは以下の「文体サンプル」を書いた本人になりきってください。
+記事の内容は正確に保ちつつ、**語尾・口癖・リズム・一人称・絵文字の使い方は、すべて以下のサンプルを模倣してください。**
+
+AI特有の「客観的な要約」は禁止です。「この人が記事を読んで感想を呟いている」ように書いてください。
 
 [文体サンプル]
 ${toneSample}
 `;
-    styleEnforcement = "上記「文体サンプル」の口調で";
   } else if (tone === 'formal') {
-    // フォーマル
-    roleDefinition = `あなたは優秀なビジネスアナリストです。`;
-    toneInstruction = `
+    prompt += `
 【文体指定：フォーマル】
-ビジネス文書や日報に適した、論理的で客観的な「です・ます」調で作成してください。
-感情的な表現は避け、事実を端的に伝えてください。
+ビジネスパーソン向けに、論理的で簡潔な「です・ます」調で書いてください。
+主観や感情は排し、ファクトを重視してください。
 `;
-    styleEnforcement = "ビジネスライクな「です・ます」調で";
   } else {
-    // カジュアル
-    roleDefinition = `あなたはSNSで人気のインフルエンサーです。`;
-    toneInstruction = `
+    prompt += `
 【文体指定：カジュアル】
-友人にLINEやSNSでシェアするような、親しみやすい「ため口（〜だね、〜だよ）」や「柔らかい敬語」を混ぜた文体にしてください。
-適度に絵文字を使い、堅苦しくない雰囲気にしてください。
+友人に話しかけるような、親しみやすい「カジュアルな口調」で書いてください。
+堅苦しい表現は避け、絵文字を適度に使って柔らかい雰囲気にしてください。
 `;
-    styleEnforcement = "親しみやすいカジュアルな口調で";
   }
 
-  // プロンプト本文
-  return `
-${roleDefinition}
-
-以下の記事を読み、**${styleEnforcement}**、3つのプラットフォーム（X, Threads, note）用に要約を作成してください。
-
-${toneInstruction}
-
-【要約対象の記事】
-${articleContent}
-
-【出力フォーマット】
-以下のキーを持つ **純粋なJSONデータのみ** を出力してください。Markdownのコードブロックは不要です。
+  // 4. 出力形式の指定
+  prompt += `
+--------------------------------------------------
+【出力タスク】
+上記の「文体」を完全に再現して、以下の3つのJSONデータを作成してください。
+（Markdown記法は不要です。純粋なJSONのみ出力してください）
 
 {
-  "twitter": "${styleEnforcement}書かれたX（旧Twitter）用の要約。130文字以内。ハッシュタグ2つ含む。結論ファースト。",
-  "threads": "${styleEnforcement}書かれたThreads用の要約。480文字以内。箇条書きを活用し読みやすく。",
-  "note": "${styleEnforcement}書かれたnote用の詳細要約。1500文字以内。見出しや箇条書きを使い、記事の全体像と結論を網羅する。"
+  "twitter": "X（旧Twitter）用。130文字以内。文体サンプルの口調で、記事の結論と感想を短く言い切る。ハッシュタグ2個。",
+  "threads": "Threads用。480文字以内。文体サンプルの口調で、箇条書きを交えて要点を語る。",
+  "note": "note用。1500文字以内。文体サンプルの口調を維持したまま、詳細な解説を行う。"
 }
-
-※注意：JSONの形式は守りつつ、中身の文章は**絶対に指定された文体（口調）を崩さない**でください。
 `;
+
+  return prompt;
 }
