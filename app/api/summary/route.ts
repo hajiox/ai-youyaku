@@ -1,4 +1,4 @@
-// /app/api/summary/route.ts ver.16 - JSON抽出ロジック強化版
+// /app/api/summary/route.ts ver.21 - モデル変更＆文字数制限解除版
 import { NextResponse } from "next/server";
 import { buildMessagesForGemini } from "@/lib/buildMessages";
 
@@ -63,7 +63,8 @@ async function callGeminiAPI(prompt: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY環境変数が設定されていません");
 
-  const modelName = 'gemini-2.5-flash-lite';
+  // 【修正1】モデルを安定版かつ高性能な 2.0-flash-exp に変更
+  const modelName = 'gemini-2.0-flash-exp';
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
   console.log(`Using Gemini model: ${modelName}`);
@@ -75,6 +76,7 @@ async function callGeminiAPI(prompt: string): Promise<string> {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.7,
+        maxOutputTokens: 8192, // 【修正2】出力文字数制限を大幅に緩和（途切れ防止）
         response_mime_type: "application/json",
       }
     }),
@@ -87,8 +89,11 @@ async function callGeminiAPI(prompt: string): Promise<string> {
     if (response.status === 404) {
       throw new Error(`モデル (${modelName}) が見つかりません。`);
     }
+    if (response.status === 503) {
+      throw new Error(`AIサーバーが混雑しています。少し時間を置いて再度お試しください。`);
+    }
     if (response.status === 429) {
-      throw new Error(`現在アクセスが集中しており制限にかかりました。30秒ほど待ってから再度お試しください。`);
+      throw new Error(`アクセス制限にかかりました。30秒ほど待機してください。`);
     }
     throw new Error(`AIサービスの呼び出しに失敗しました (${response.status})`);
   }
@@ -107,25 +112,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'URLは必須です' }, { status: 400 });
     }
 
-    // 1. 記事取得
     const fetchResult = await fetchUrlContent(url);
     if (fetchResult.error || !fetchResult.content) {
       return NextResponse.json({ error: fetchResult.error }, { status: 500 });
     }
 
-    // 2. プロンプト作成
     let prompt = buildMessagesForGemini(tone, fetchResult.content, toneSample);
     if (fetchResult.truncated) {
       prompt = `（記事が長いため冒頭${MAX_INPUT_CHAR_LENGTH}文字のみ使用）\n${prompt}`;
     }
 
-    // 3. AI生成実行
     const jsonString = await callGeminiAPI(prompt);
 
-    // 4. JSON解析（強化版）
+    // JSON解析（切り出し処理付き）
     let result;
     try {
-      // 最初の '{' と 最後の '}' を見つけて、その間だけを切り抜く
       const firstOpen = jsonString.indexOf('{');
       const lastClose = jsonString.lastIndexOf('}');
       
@@ -133,13 +134,12 @@ export async function POST(req: Request) {
         const cleanJson = jsonString.substring(firstOpen, lastClose + 1);
         result = JSON.parse(cleanJson);
       } else {
-        // 万が一 {} が見つからない場合はそのままパースしてみる
         result = JSON.parse(jsonString);
       }
     } catch (e) {
       console.error("JSON Parse Error:", e);
-      console.error("Raw string:", jsonString); // デバッグ用に生の文字列もログに出す
-      return NextResponse.json({ error: "AIの応答形式が不正でした" }, { status: 500 });
+      // 万が一失敗してもログに残してユーザーには分かりやすいエラーを返す
+      return NextResponse.json({ error: "要約が長すぎて処理できませんでした。別の記事で試してください。" }, { status: 500 });
     }
 
     return NextResponse.json({ 
