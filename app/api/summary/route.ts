@@ -66,7 +66,7 @@ async function callGeminiAPI(prompt: string): Promise<string> {
   if (!apiKey) throw new Error("GEMINI_API_KEY環境変数が設定されていません");
 
   // 【修正】制限の緩い安定版モデルに変更（無料枠で安定動作）
-  const modelName = 'gemini-1.5-flash';
+  const modelName = 'gemini-2.5-flash-lite';
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
   console.log(`Using Gemini model: ${modelName}`);
