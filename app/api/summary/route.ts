@@ -1,4 +1,4 @@
-// /app/api/summary/route.ts ver.21 - モデル変更＆文字数制限解除版
+// /app/api/summary/route.ts ver.22 - Gemini 2.5 Flash (標準版) 採用
 import { NextResponse } from "next/server";
 import { buildMessagesForGemini } from "@/lib/buildMessages";
 
@@ -63,8 +63,9 @@ async function callGeminiAPI(prompt: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY環境変数が設定されていません");
 
-  // 【修正1】モデルを安定版かつ高性能な 2.0-flash-exp に変更
-  const modelName = 'gemini-2.0-flash-exp';
+  // 【修正】標準モデル 'gemini-2.5-flash' を使用
+  // Vertex AIの画面にあった「Gemini 2.5 Flash」を指定
+  const modelName = 'gemini-2.5-flash';
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
   console.log(`Using Gemini model: ${modelName}`);
@@ -76,7 +77,7 @@ async function callGeminiAPI(prompt: string): Promise<string> {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 8192, // 【修正2】出力文字数制限を大幅に緩和（途切れ防止）
+        maxOutputTokens: 8192, // 長文要約のためにトークン数を確保
         response_mime_type: "application/json",
       }
     }),
@@ -87,13 +88,16 @@ async function callGeminiAPI(prompt: string): Promise<string> {
     console.error(`Gemini API error:`, response.status, errorText);
     
     if (response.status === 404) {
+      // 2.5-flashも見つからない場合はLiteに戻してリトライを促すなどの対策が必要だが、
+      // 画面キャプチャにある通り存在するはず。
       throw new Error(`モデル (${modelName}) が見つかりません。`);
     }
     if (response.status === 503) {
-      throw new Error(`AIサーバーが混雑しています。少し時間を置いて再度お試しください。`);
+      throw new Error(`AIサーバーが混雑しています。1分ほど待ってから再度お試しください。`);
     }
     if (response.status === 429) {
-      throw new Error(`アクセス制限にかかりました。30秒ほど待機してください。`);
+      // Limit 0 ではなく、通常のレートリミットの場合は待機を促す
+      throw new Error(`アクセス制限にかかりました。少し時間を置いて再度お試しください。`);
     }
     throw new Error(`AIサービスの呼び出しに失敗しました (${response.status})`);
   }
@@ -138,8 +142,7 @@ export async function POST(req: Request) {
       }
     } catch (e) {
       console.error("JSON Parse Error:", e);
-      // 万が一失敗してもログに残してユーザーには分かりやすいエラーを返す
-      return NextResponse.json({ error: "要約が長すぎて処理できませんでした。別の記事で試してください。" }, { status: 500 });
+      return NextResponse.json({ error: "要約の生成に失敗しました（形式エラー）。別の記事でお試しください。" }, { status: 500 });
     }
 
     return NextResponse.json({ 
