@@ -1,4 +1,4 @@
-// /app/page.tsx ver.14 - 3プラットフォームUI版
+// /app/page.tsx ver.19 - レイアウト修正（要約グリッド＋下部おすすめ）版
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -100,14 +100,13 @@ export default function Home() {
     
     setAmazonKeywords(uniqueKeywords);
     
-    if (uniqueKeywords.length === 0) return;
-
     setAmazonLoading(true);
     try {
+      // noteの要約がある場合は、必ず検索をかける（キーワードが空でもランダム取得させるためAPIを呼ぶ）
       const response = await fetch('/api/amazon-products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isMobile }) // キーワード検索廃止済みのためisMobileのみ
+        body: JSON.stringify({ isMobile }) 
       });
       if (response.ok) {
         const data = await response.json();
@@ -147,7 +146,7 @@ export default function Home() {
 
       setSummaries(data.summary);
       
-      // note要約を使って商品検索（一番情報量が多いため）
+      // note要約を使って商品検索
       if (data.summary.note) {
         fetchAmazonProducts(data.summary.note);
       }
@@ -289,13 +288,12 @@ export default function Home() {
 
         {/* 結果表示エリア */}
         {summaries && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="space-y-8">
             
-            {/* 左カラム：要約結果 */}
-            <div className="lg:col-span-2 space-y-6">
-              
+            {/* 上段：XとThreadsを横並び（スマホは縦並び） */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* X (Twitter) */}
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full">
                 <div className="bg-slate-900 px-4 py-3 flex justify-between items-center">
                   <h3 className="text-white font-bold flex items-center gap-2">
                     <span className="text-lg">𝕏</span> 
@@ -303,13 +301,13 @@ export default function Home() {
                   </h3>
                   <button onClick={() => handleCopy(summaries.twitter)} className="text-xs bg-slate-700 text-white px-3 py-1 rounded hover:bg-slate-600 transition-colors">コピー</button>
                 </div>
-                <div className="p-5">
+                <div className="p-5 flex-grow">
                   <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{summaries.twitter}</p>
                 </div>
               </div>
 
               {/* Threads */}
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full">
                 <div className="bg-black px-4 py-3 flex justify-between items-center">
                   <h3 className="text-white font-bold flex items-center gap-2">
                     <span>@ Threads</span>
@@ -317,31 +315,30 @@ export default function Home() {
                   </h3>
                   <button onClick={() => handleCopy(summaries.threads)} className="text-xs bg-gray-800 text-white px-3 py-1 rounded hover:bg-gray-700 transition-colors">コピー</button>
                 </div>
-                <div className="p-5">
+                <div className="p-5 flex-grow">
                   <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{summaries.threads}</p>
                 </div>
               </div>
-
-              {/* note */}
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="bg-[#41c9b4] px-4 py-3 flex justify-between items-center">
-                  <h3 className="text-white font-bold flex items-center gap-2">
-                    <span>note</span>
-                    <span className="text-xs font-normal text-white/80">詳細要約</span>
-                  </h3>
-                  <button onClick={() => handleCopy(summaries.note)} className="text-xs bg-[#2da896] text-white px-3 py-1 rounded hover:bg-[#238c7d] transition-colors">コピー</button>
-                </div>
-                <div className="p-5">
-                  <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{summaries.note}</p>
-                </div>
-              </div>
-
             </div>
 
-            {/* 右カラム：登録リンク（広告） */}
-            <div className="lg:col-span-1">
+            {/* 下段：note（幅広） */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="bg-[#41c9b4] px-4 py-3 flex justify-between items-center">
+                <h3 className="text-white font-bold flex items-center gap-2">
+                  <span>note</span>
+                  <span className="text-xs font-normal text-white/80">詳細要約</span>
+                </h3>
+                <button onClick={() => handleCopy(summaries.note)} className="text-xs bg-[#2da896] text-white px-3 py-1 rounded hover:bg-[#238c7d] transition-colors">コピー</button>
+              </div>
+              <div className="p-5">
+                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{summaries.note}</p>
+              </div>
+            </div>
+
+            {/* 最下段：おすすめコンテンツ（全幅） */}
+            <div className="pt-4 border-t border-slate-200">
                <AmazonProductShowcase
-                  keywords={amazonKeywords} // note要約から抽出したキーワード
+                  keywords={amazonKeywords}
                   products={amazonProducts}
                   isLoading={amazonLoading}
                   error={amazonError}
