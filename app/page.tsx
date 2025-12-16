@@ -1,4 +1,4 @@
-// /app/page.tsx ver.19 - レイアウト修正（要約グリッド＋下部おすすめ）版
+// /app/page.tsx ver.20 - レイアウト調整＆ボタン統一版
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -25,9 +25,7 @@ export default function Home() {
   const [url, setUrl] = useState('');
   const [tone, setTone] = useState<'casual' | 'formal' | 'custom'>('casual');
   
-  // 要約結果をオブジェクトで管理
   const [summaries, setSummaries] = useState<SummaryResult | null>(null);
-  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
@@ -38,17 +36,16 @@ export default function Home() {
   const [saveToneError, setSaveToneError] = useState<string | null>(null);
   const [saveToneSuccess, setSaveToneSuccess] = useState<string | null>(null);
 
-  // Amazon商品関連
+  // おすすめコンテンツ関連
   const [amazonKeywords, setAmazonKeywords] = useState<string[]>([]);
   const [amazonProducts, setAmazonProducts] = useState<AmazonProduct[]>([]);
   const [amazonLoading, setAmazonLoading] = useState(false);
   const [amazonError, setAmazonError] = useState<string | null>(null);
 
-  // モバイル判定
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024); // PCレイアウト切り替えラインを1024pxに設定
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
@@ -92,17 +89,13 @@ export default function Home() {
     }
   };
 
-  // 商品取得（noteの要約からキーワード抽出）
   const fetchAmazonProducts = async (text: string) => {
-    // 簡易キーワード抽出（3文字以上のカタカナ/漢字）
     const keywords = text.match(/[ァ-ヶー]{3,}|[一-龠]{2,}/g) || [];
     const uniqueKeywords = Array.from(new Set(keywords)).slice(0, 3);
-    
     setAmazonKeywords(uniqueKeywords);
     
     setAmazonLoading(true);
     try {
-      // noteの要約がある場合は、必ず検索をかける（キーワードが空でもランダム取得させるためAPIを呼ぶ）
       const response = await fetch('/api/amazon-products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -146,7 +139,6 @@ export default function Home() {
 
       setSummaries(data.summary);
       
-      // note要約を使って商品検索
       if (data.summary.note) {
         fetchAmazonProducts(data.summary.note);
       }
@@ -175,9 +167,12 @@ export default function Home() {
     setAmazonProducts([]);
   };
 
+  // ボタン共通スタイル
+  const buttonBaseClass = "w-full h-12 flex items-center justify-center rounded-lg text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed";
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-      <main className="flex-1 container mx-auto px-4 py-8 max-w-5xl">
+      <main className="flex-1 container mx-auto px-4 py-8 max-w-6xl">
         {/* ヘッダーエリア */}
         <div className="text-center mb-10">
           <h1 className="text-3xl md:text-4xl font-extrabold text-slate-800 mb-3 tracking-tight">
@@ -194,24 +189,15 @@ export default function Home() {
                   <div className="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
                   <span className="text-xs text-slate-600">{session.user?.email}</span>
                 </div>
-                <button
-                  onClick={() => setShowToneModal(true)}
-                  className="text-xs font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-3 py-1.5 rounded-full transition-colors"
-                >
+                <button onClick={() => setShowToneModal(true)} className="text-xs font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-3 py-1.5 rounded-full transition-colors">
                   自分の口調を設定
                 </button>
-                <button
-                  onClick={() => signOut()}
-                  className="text-xs text-slate-500 hover:text-slate-700 underline"
-                >
+                <button onClick={() => signOut()} className="text-xs text-slate-500 hover:text-slate-700 underline">
                   ログアウト
                 </button>
               </>
             ) : (
-              <button
-                onClick={() => signIn('google')}
-                className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 shadow-sm transition-all"
-              >
+              <button onClick={() => signIn('google')} className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 shadow-sm transition-all">
                 Googleでログインして機能制限を解除
               </button>
             )}
@@ -219,45 +205,47 @@ export default function Home() {
         </div>
 
         {/* 入力エリア */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8 max-w-4xl mx-auto">
           <input
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://..."
+            placeholder="記事のURLを入力 (https://...)"
             className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg mb-6 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-slate-800 placeholder-slate-400"
           />
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          {/* ボタンエリア: 高さとデザインを統一 */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
             <button
               onClick={() => handleToneButtonClick('casual')}
               disabled={loading}
-              className="py-3 px-2 rounded-lg text-sm font-bold text-white bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-500 hover:to-blue-600 shadow-sm transition-all disabled:opacity-50"
+              className={`${buttonBaseClass} bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-500 hover:to-blue-600`}
             >
               😊 カジュアル
             </button>
+            
             <button
               onClick={() => handleToneButtonClick('formal')}
               disabled={loading}
-              className="py-3 px-2 rounded-lg text-sm font-bold text-white bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 shadow-sm transition-all disabled:opacity-50"
+              className={`${buttonBaseClass} bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800`}
             >
               👔 フォーマル
             </button>
             
-            {session && (
-              <>
-                <button
-                  onClick={() => { setTone('custom'); handleSummarize('custom'); }}
-                  disabled={loading}
-                  className={`col-span-2 md:col-span-2 py-3 px-2 rounded-lg text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 ${
-                    toneSample 
-                      ? "bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700" 
-                      : "bg-slate-300 cursor-not-allowed"
-                  }`}
-                >
-                  ✨ あなたの口調で要約 {toneSample ? "" : "(未設定)"}
-                </button>
-              </>
+            {session ? (
+              <button
+                onClick={() => { setTone('custom'); handleSummarize('custom'); }}
+                disabled={loading}
+                className={`${buttonBaseClass} ${
+                  toneSample 
+                    ? "bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700" 
+                    : "bg-slate-300 cursor-not-allowed"
+                }`}
+              >
+                ✨ あなたの口調 {toneSample ? "" : "(未設定)"}
+              </button>
+            ) : (
+              <div className="hidden sm:block"></div> /* レイアウト調整用空要素 */
             )}
           </div>
 
@@ -271,11 +259,9 @@ export default function Home() {
           )}
 
           {loading && (
-            <div className="mt-6 text-center py-8">
+            <div className="mt-6 text-center py-4">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-100 border-t-indigo-500 mb-2"></div>
-              <p className="text-indigo-600 font-medium animate-pulse">
-                3つのプラットフォーム用に書き分けています...
-              </p>
+              <p className="text-indigo-600 font-medium animate-pulse">要約を作成中...</p>
             </div>
           )}
 
@@ -286,14 +272,15 @@ export default function Home() {
           )}
         </div>
 
-        {/* 結果表示エリア */}
+        {/* 結果表示エリア: 2カラム構成 (左:要約 / 右:おすすめ) */}
         {summaries && (
-          <div className="space-y-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
             
-            {/* 上段：XとThreadsを横並び（スマホは縦並び） */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* 左カラム：要約 (縦3段) */}
+            <div className="lg:col-span-2 space-y-6">
+              
               {/* X (Twitter) */}
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full">
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="bg-slate-900 px-4 py-3 flex justify-between items-center">
                   <h3 className="text-white font-bold flex items-center gap-2">
                     <span className="text-lg">𝕏</span> 
@@ -301,13 +288,13 @@ export default function Home() {
                   </h3>
                   <button onClick={() => handleCopy(summaries.twitter)} className="text-xs bg-slate-700 text-white px-3 py-1 rounded hover:bg-slate-600 transition-colors">コピー</button>
                 </div>
-                <div className="p-5 flex-grow">
+                <div className="p-5">
                   <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{summaries.twitter}</p>
                 </div>
               </div>
 
               {/* Threads */}
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full">
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="bg-black px-4 py-3 flex justify-between items-center">
                   <h3 className="text-white font-bold flex items-center gap-2">
                     <span>@ Threads</span>
@@ -315,28 +302,29 @@ export default function Home() {
                   </h3>
                   <button onClick={() => handleCopy(summaries.threads)} className="text-xs bg-gray-800 text-white px-3 py-1 rounded hover:bg-gray-700 transition-colors">コピー</button>
                 </div>
-                <div className="p-5 flex-grow">
+                <div className="p-5">
                   <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{summaries.threads}</p>
                 </div>
               </div>
+
+              {/* note */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="bg-[#41c9b4] px-4 py-3 flex justify-between items-center">
+                  <h3 className="text-white font-bold flex items-center gap-2">
+                    <span>note</span>
+                    <span className="text-xs font-normal text-white/80">詳細要約</span>
+                  </h3>
+                  <button onClick={() => handleCopy(summaries.note)} className="text-xs bg-[#2da896] text-white px-3 py-1 rounded hover:bg-[#238c7d] transition-colors">コピー</button>
+                </div>
+                <div className="p-5">
+                  <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{summaries.note}</p>
+                </div>
+              </div>
+
             </div>
 
-            {/* 下段：note（幅広） */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="bg-[#41c9b4] px-4 py-3 flex justify-between items-center">
-                <h3 className="text-white font-bold flex items-center gap-2">
-                  <span>note</span>
-                  <span className="text-xs font-normal text-white/80">詳細要約</span>
-                </h3>
-                <button onClick={() => handleCopy(summaries.note)} className="text-xs bg-[#2da896] text-white px-3 py-1 rounded hover:bg-[#238c7d] transition-colors">コピー</button>
-              </div>
-              <div className="p-5">
-                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{summaries.note}</p>
-              </div>
-            </div>
-
-            {/* 最下段：おすすめコンテンツ（全幅） */}
-            <div className="pt-4 border-t border-slate-200">
+            {/* 右カラム：おすすめコンテンツ (縦並び) */}
+            <div className="lg:col-span-1">
                <AmazonProductShowcase
                   keywords={amazonKeywords}
                   products={amazonProducts}
