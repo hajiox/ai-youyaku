@@ -1,4 +1,4 @@
-// /app/page.tsx ver.20 - レイアウト調整＆ボタン統一版
+// /app/page.tsx ver.21 - UIゆとり調整版
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -42,10 +42,12 @@ export default function Home() {
   const [amazonLoading, setAmazonLoading] = useState(false);
   const [amazonError, setAmazonError] = useState<string | null>(null);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 1024); // PCレイアウト切り替えラインを1024pxに設定
+    // JS側でのモバイル判定（API送信用）
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
@@ -96,10 +98,12 @@ export default function Home() {
     
     setAmazonLoading(true);
     try {
+      // isMobileステートを使ってAPIに現在の画面状況を伝える
+      const currentIsMobile = window.innerWidth < 1024;
       const response = await fetch('/api/amazon-products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isMobile }) 
+        body: JSON.stringify({ isMobile: currentIsMobile }) 
       });
       if (response.ok) {
         const data = await response.json();
@@ -204,8 +208,8 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 入力エリア */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8 max-w-4xl mx-auto">
+        {/* 入力エリア（幅制限を削除し、ゆとりを持たせる） */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8 w-full">
           <input
             type="text"
             value={url}
@@ -214,8 +218,8 @@ export default function Home() {
             className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg mb-6 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-slate-800 placeholder-slate-400"
           />
 
-          {/* ボタンエリア: 高さとデザインを統一 */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+          {/* ボタンエリア: md(768px)未満は縦並び、md以上で横並び */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
             <button
               onClick={() => handleToneButtonClick('casual')}
               disabled={loading}
@@ -245,7 +249,7 @@ export default function Home() {
                 ✨ あなたの口調 {toneSample ? "" : "(未設定)"}
               </button>
             ) : (
-              <div className="hidden sm:block"></div> /* レイアウト調整用空要素 */
+              <div className="hidden md:block"></div>
             )}
           </div>
 
