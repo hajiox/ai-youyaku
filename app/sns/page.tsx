@@ -1,342 +1,508 @@
-// /app/sns/page.tsx ver.2
+// /app/sns/page.tsx ver.3
 "use client";
 
-import { useState } from "react";
-import { useSession, signIn } from "next-auth/react";
+import { useState, useRef } from "react";
+import { useSession, signIn, signOut } from "next-auth/react";
 
 type Platform = "x" | "instagram" | "story" | "threads";
 
-type GeneratedContent = {
-  x: string;
-  instagram: string;
-  story: string;
-  threads: string;
-};
+interface PlatformConfig {
+  id: Platform;
+  name: string;
+  aspectRatio: string;
+  description: string;
+}
 
-type GeneratedImages = {
-  x: string;
-  instagram: string;
-  story: string;
-  threads: string;
-};
-
-const PLATFORMS: { id: Platform; name: string; aspectRatio: string; maxChars: number }[] = [
-  { id: "x", name: "X", aspectRatio: "16:9", maxChars: 400 },
-  { id: "instagram", name: "Instagram", aspectRatio: "1:1", maxChars: 2200 },
-  { id: "story", name: "IGストーリー", aspectRatio: "9:16", maxChars: 50 },
-  { id: "threads", name: "Threads", aspectRatio: "4:3", maxChars: 500 },
+const PLATFORMS: PlatformConfig[] = [
+  { id: "x", name: "X", aspectRatio: "16:9", description: "400文字以内" },
+  { id: "instagram", name: "Instagram", aspectRatio: "1:1", description: "2,200文字、ハッシュタグ10-15個" },
+  { id: "story", name: "IGストーリー", aspectRatio: "9:16", description: "50文字以内" },
+  { id: "threads", name: "Threads", aspectRatio: "4:3", description: "500文字以内" },
 ];
+
+interface GeneratedResult {
+  text: string;
+  croppedImage?: string;
+  arrangedImage?: string;
+}
 
 export default function SNSPage() {
   const { data: session, status } = useSession();
   const [originalText, setOriginalText] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>(["x", "instagram", "story", "threads"]);
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
-  const [uploadedFileName, setUploadedFileName] = useState<string>("");
-  const [generatedTexts, setGeneratedTexts] = useState<GeneratedContent | null>(null);
-  const [generatedImages, setGeneratedImages] = useState<GeneratedImages | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [originalImage, setOriginalImage] = useState<string | null>(null);
+  const [results, setResults] = useState<Record<Platform, GeneratedResult>>({
+    x: { text: "" },
+    instagram: { text: "" },
+    story: { text: "" },
+    threads: { text: "" },
+  });
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [arrangingPlatform, setArrangingPlatform] = useState<Platform | null>(null);
+  const [arrangePrompts, setArrangePrompts] = useState<Record<Platform, string>>({
+    x: "商品はそのまま維持し、背景を木目調のテーブルに変更してください",
+    instagram: "商品はそのまま維持し、背景を白い大理石に変更してください",
+    story: "商品はそのまま維持し、背景をカフェ風に変更してください",
+    threads: "商品はそのまま維持し、背景をキッチンカウンターに変更してください",
+  });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // クロップ関数（Canvas API使用、無料）
+  const cropToAspectRatio = (
+    imageDataUrl: string,
+    targetRatio: string
+  ): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const [ratioW, ratioH] = targetRatio.split(":").map(Number);
+        const targetAspect = ratioW / ratioH;
+        const sourceAspect = img.width / img.height;
+
+        let cropWidth: number;
+        let cropHeight: number;
+        let offsetX: number;
+        let offsetY: number;
+
+        if (sourceAspect > targetAspect) {
+          cropHeight = img.height;
+          cropWidth = img.height * targetAspect;
+          offsetX = (img.width - cropWidth) / 2;
+          offsetY = 0;
+        } else {
+          cropWidth = img.width;
+          cropHeight = img.width / targetAspect;
+          offsetX = 0;
+          offsetY = (img.height - cropHeight) / 2;
+        }
+
+        const canvas = document.createElement("canvas");
+        const maxWidth = 1200;
+        const scale = Math.min(1, maxWidth / cropWidth);
+        canvas.width = cropWidth * scale;
+        canvas.height = cropHeight * scale;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Canvas context not available"));
+          return;
+        }
+
+        ctx.drawImage(
+          img,
+          offsetX,
+          offsetY,
+          cropWidth,
+          cropHeight,
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        );
+
+        resolve(canvas.toDataURL("image/jpeg", 0.9));
+      };
+      img.onerror = () => reject(new Error("画像の読み込みに失敗しました"));
+      img.src = imageDataUrl;
+    });
+  };
+
+  // 画像アップロード処理
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const dataUrl = event.target?.result as string;
+      setOriginalImage(dataUrl);
+
+      // 各プラットフォーム用にクロップ
+      const newResults = { ...results };
+      for (const platform of PLATFORMS) {
+        try {
+          const cropped = await cropToAspectRatio(dataUrl, platform.aspectRatio);
+          newResults[platform.id] = {
+            ...newResults[platform.id],
+            croppedImage: cropped,
+            arrangedImage: undefined,
+          };
+        } catch (err) {
+          console.error(`Error cropping for ${platform.id}:`, err);
+        }
+      }
+      setResults(newResults);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // 文章生成
+  const handleGenerate = async () => {
+    if (!originalText.trim()) {
+      alert("基本文章を入力してください");
+      return;
+    }
+
+    setIsGenerating(true);
+
+    try {
+      const response = await fetch("/api/sns/generate-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          originalText,
+          platforms: selectedPlatforms,
+          linkUrl: linkUrl || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("文章生成に失敗しました");
+      }
+
+      const data = await response.json();
+
+      // 結果を更新（画像は保持）
+      const newResults = { ...results };
+      for (const platform of selectedPlatforms) {
+        newResults[platform] = {
+          ...newResults[platform],
+          text: data[platform] || "",
+        };
+      }
+      setResults(newResults);
+    } catch (error) {
+      console.error("Generate error:", error);
+      alert("文章生成中にエラーが発生しました");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // 画像アレンジ（AI使用、有料）
+  const handleArrangeImage = async (platform: Platform) => {
+    const croppedImage = results[platform].croppedImage;
+    if (!croppedImage) {
+      alert("先に画像をアップロードしてください");
+      return;
+    }
+
+    const prompt = arrangePrompts[platform];
+    if (!prompt.trim()) {
+      alert("プロンプトを入力してください");
+      return;
+    }
+
+    const confirmed = confirm(
+      `画像アレンジを実行しますか？\n\n` +
+      `プロンプト: ${prompt}\n\n` +
+      `※ 約6円/回のAPI料金が発生します`
+    );
+
+    if (!confirmed) return;
+
+    setArrangingPlatform(platform);
+
+    try {
+      const response = await fetch("/api/sns/arrange-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageBase64: croppedImage,
+          prompt,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "画像編集に失敗しました");
+      }
+
+      const data = await response.json();
+
+      if (data.success && data.imageBase64) {
+        setResults((prev) => ({
+          ...prev,
+          [platform]: {
+            ...prev[platform],
+            arrangedImage: data.imageBase64,
+          },
+        }));
+      } else {
+        throw new Error("画像が生成されませんでした");
+      }
+    } catch (error) {
+      console.error("Arrange error:", error);
+      alert(error instanceof Error ? error.message : "画像編集中にエラーが発生しました");
+    } finally {
+      setArrangingPlatform(null);
+    }
+  };
+
+  // クリア機能
+  const handleClear = () => {
+    const confirmed = confirm("入力内容と生成結果をすべてクリアしますか？");
+    if (!confirmed) return;
+
+    setOriginalText("");
+    setLinkUrl("");
+    setOriginalImage(null);
+    setResults({
+      x: { text: "" },
+      instagram: { text: "" },
+      story: { text: "" },
+      threads: { text: "" },
+    });
+    setArrangePrompts({
+      x: "商品はそのまま維持し、背景を木目調のテーブルに変更してください",
+      instagram: "商品はそのまま維持し、背景を白い大理石に変更してください",
+      story: "商品はそのまま維持し、背景をカフェ風に変更してください",
+      threads: "商品はそのまま維持し、背景をキッチンカウンターに変更してください",
+    });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  // コピー機能
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert("コピーしました");
+  };
+
+  // 画像ダウンロード
+  const downloadImage = (dataUrl: string, filename: string) => {
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = filename;
+    link.click();
+  };
+
+  // ログイン画面
   if (status === "loading") {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-600">読み込み中...</div>
+      <div className="min-h-screen flex items-center justify-center">
+        <p>読み込み中...</p>
       </div>
     );
   }
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-md text-center">
-          <h1 className="text-2xl font-bold mb-4">SNS投稿最適化ツール</h1>
-          <p className="text-gray-600 mb-6">利用するにはGoogleアカウントでログインしてください</p>
-          <button
-            onClick={() => signIn("google")}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition"
-          >
-            Googleでログイン
-          </button>
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <h1 className="text-2xl font-bold">SNS投稿最適化ツール</h1>
+        <p className="text-gray-600">ログインして利用を開始してください</p>
+        <button
+          onClick={() => signIn("google")}
+          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          Googleでログイン
+        </button>
       </div>
     );
   }
 
-  const togglePlatform = (platform: Platform) => {
-    setSelectedPlatforms((prev) => {
-      if (prev.includes(platform)) {
-        return prev.filter((p) => p !== platform);
-      }
-      return [...prev, platform];
-    });
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setError("画像ファイルを選択してください");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setUploadedImage(event.target?.result as string);
-      setUploadedFileName(file.name);
-      setError(null);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const cropToAspectRatio = (imageDataUrl: string, aspectRatio: string): Promise<string> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          resolve(imageDataUrl);
-          return;
-        }
-        const parts = aspectRatio.split(":");
-        const w = parseInt(parts[0], 10);
-        const h = parseInt(parts[1], 10);
-        const targetRatio = w / h;
-        const imgRatio = img.width / img.height;
-        let cropWidth: number;
-        let cropHeight: number;
-        let offsetX: number;
-        let offsetY: number;
-        if (imgRatio > targetRatio) {
-          cropHeight = img.height;
-          cropWidth = img.height * targetRatio;
-          offsetX = (img.width - cropWidth) / 2;
-          offsetY = 0;
-        } else {
-          cropWidth = img.width;
-          cropHeight = img.width / targetRatio;
-          offsetX = 0;
-          offsetY = (img.height - cropHeight) / 2;
-        }
-        const outputWidth = Math.min(cropWidth, 1200);
-        const outputHeight = outputWidth / targetRatio;
-        canvas.width = outputWidth;
-        canvas.height = outputHeight;
-        ctx.drawImage(img, offsetX, offsetY, cropWidth, cropHeight, 0, 0, outputWidth, outputHeight);
-        resolve(canvas.toDataURL("image/jpeg", 0.9));
-      };
-      img.src = imageDataUrl;
-    });
-  };
-
-  const handleGenerate = async () => {
-    if (!originalText.trim()) {
-      setError("基本文章を入力してください");
-      return;
-    }
-    if (selectedPlatforms.length === 0) {
-      setError("出力先SNSを1つ以上選択してください");
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    try {
-      const textRes = await fetch("/api/sns/generate-text", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          originalText: originalText,
-          platforms: selectedPlatforms,
-          linkUrl: linkUrl || undefined,
-        }),
-      });
-      if (!textRes.ok) {
-        throw new Error("文章生成に失敗しました");
-      }
-      const textData = await textRes.json();
-      setGeneratedTexts(textData);
-      if (uploadedImage) {
-        const images: GeneratedImages = { x: "", instagram: "", story: "", threads: "" };
-        for (const platform of selectedPlatforms) {
-          const platformInfo = PLATFORMS.find((p) => p.id === platform);
-          if (platformInfo) {
-            images[platform] = await cropToAspectRatio(uploadedImage, platformInfo.aspectRatio);
-          }
-        }
-        setGeneratedImages(images);
-      }
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("エラーが発生しました");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const copyToClipboard = async (text: string, platformName: string) => {
-    await navigator.clipboard.writeText(text);
-    alert(platformName + "用の文章をコピーしました");
-  };
-
-  const downloadImage = (dataUrl: string, platformId: string) => {
-    const link = document.createElement("a");
-    link.href = dataUrl;
-    link.download = "sns_" + platformId + "_" + Date.now() + ".jpg";
-    link.click();
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-xl font-bold text-gray-800">SNS投稿最適化ツール</h1>
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-6xl mx-auto px-4">
+        {/* ヘッダー */}
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-2xl font-bold">SNS投稿最適化ツール</h1>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">{session.user?.name}</span>
-            <a href="/" className="text-sm text-blue-600 hover:underline">AI要約へ</a>
-          </div>
-        </div>
-      </header>
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold mb-4">基本文章</h2>
-              <textarea
-                value={originalText}
-                onChange={(e) => setOriginalText(e.target.value)}
-                placeholder="商品紹介や伝えたい内容を入力してください..."
-                className="w-full h-40 p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                maxLength={2000}
-              />
-              <div className="text-right text-sm text-gray-500 mt-1">
-                {originalText.length} / 2000
-              </div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold mb-4">リンクURL（任意）</h2>
-              <input
-                type="url"
-                value={linkUrl}
-                onChange={(e) => setLinkUrl(e.target.value)}
-                placeholder="https://example.com"
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <p className="text-xs text-gray-500 mt-2">X、Threadsで使用されます（Instagramはプロフ誘導に変換）</p>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold mb-4">画像アップロード</h2>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                {uploadedImage ? (
-                  <div>
-                    <img src={uploadedImage} alt="アップロード画像" className="max-h-48 mx-auto rounded" />
-                    <p className="text-sm text-gray-600 mt-2">{uploadedFileName}</p>
-                    <button
-                      onClick={() => { setUploadedImage(null); setUploadedFileName(""); }}
-                      className="text-red-500 text-sm mt-2 hover:underline"
-                    >
-                      削除
-                    </button>
-                  </div>
-                ) : (
-                  <label className="cursor-pointer">
-                    <div className="text-gray-500">
-                      <p className="text-4xl mb-2">📷</p>
-                      <p>クリックで画像を選択</p>
-                      <p className="text-xs mt-1">JPG, PNG, WebP対応</p>
-                    </div>
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                  </label>
-                )}
-              </div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-lg font-semibold mb-4">出力先SNS</h2>
-              <div className="grid grid-cols-2 gap-3">
-                {PLATFORMS.map((platform) => (
-                  <button
-                    key={platform.id}
-                    onClick={() => togglePlatform(platform.id)}
-                    className={
-                      "p-3 rounded-lg border-2 transition text-left " +
-                      (selectedPlatforms.includes(platform.id)
-                        ? "border-blue-500 bg-blue-50"
-                        : "border-gray-200 hover:border-gray-300")
-                    }
-                  >
-                    <div className="font-medium">{platform.name}</div>
-                    <div className="text-xs text-gray-500">{platform.aspectRatio} / {platform.maxChars}文字</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-            {error && (
-              <div className="bg-red-50 text-red-600 p-4 rounded-lg">{error}</div>
-            )}
+            <span className="text-sm text-gray-600">{session.user?.email}</span>
             <button
-              onClick={handleGenerate}
-              disabled={isLoading}
-              className="w-full bg-blue-600 text-white py-4 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
+              onClick={() => signOut()}
+              className="text-sm text-gray-500 hover:text-gray-700"
             >
-              {isLoading ? "生成中..." : "投稿を生成する"}
+              ログアウト
             </button>
           </div>
-          <div className="space-y-6">
-            <h2 className="text-lg font-semibold">生成結果</h2>
-            {!generatedTexts ? (
-              <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-                <p className="text-4xl mb-4">👈</p>
-                <p>左側で入力して「投稿を生成する」を押してください</p>
+        </div>
+
+        {/* 入力エリア */}
+        <div className="bg-white rounded-lg shadow p-6 mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold">入力</h2>
+            <button
+              onClick={handleClear}
+              className="px-4 py-2 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+            >
+              🗑️ クリア
+            </button>
+          </div>
+
+          {/* 基本文章 */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">基本文章</label>
+            <textarea
+              value={originalText}
+              onChange={(e) => setOriginalText(e.target.value)}
+              placeholder="投稿したい内容を入力してください..."
+              className="w-full h-32 px-3 py-2 border rounded-lg resize-none"
+            />
+          </div>
+
+          {/* リンクURL */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">リンクURL（任意）</label>
+            <input
+              type="url"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="https://..."
+              className="w-full px-3 py-2 border rounded-lg"
+            />
+          </div>
+
+          {/* 画像アップロード */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">画像（任意）</label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="w-full"
+            />
+            {originalImage && (
+              <div className="mt-2">
+                <img
+                  src={originalImage}
+                  alt="アップロード画像"
+                  className="max-h-40 rounded"
+                />
               </div>
-            ) : (
-              PLATFORMS.filter((p) => selectedPlatforms.includes(p.id)).map((platform) => (
-                <div key={platform.id} className="bg-white rounded-lg shadow p-6">
-                  <div className="flex justify-between items-center mb-3">
-                    <h3 className="font-semibold">{platform.name}</h3>
-                    <span className="text-xs text-gray-500">{platform.aspectRatio}</span>
-                  </div>
-                  <div className="bg-gray-50 rounded p-3 mb-3">
-                    <p className="whitespace-pre-wrap text-sm">{generatedTexts[platform.id]}</p>
-                    <div className="flex justify-between items-center mt-2">
-                      <span className="text-xs text-gray-500">
-                        {generatedTexts[platform.id]?.length || 0} / {platform.maxChars}文字
-                      </span>
-                      <button
-                        onClick={() => copyToClipboard(generatedTexts[platform.id], platform.name)}
-                        className="text-blue-600 text-sm hover:underline"
-                      >
-                        コピー
-                      </button>
-                    </div>
-                  </div>
-                  {generatedImages && generatedImages[platform.id] && (
-                    <div className="border rounded p-3">
-                      <img src={generatedImages[platform.id]} alt={platform.name + "用画像"} className="w-full rounded" />
-                      <div className="flex gap-2 mt-2">
-                        <button
-                          onClick={() => downloadImage(generatedImages[platform.id], platform.id)}
-                          className="flex-1 bg-gray-100 text-gray-700 py-2 rounded text-sm hover:bg-gray-200"
-                        >
-                          画像を保存
-                        </button>
-                        <button
-                          className="flex-1 bg-purple-100 text-purple-700 py-2 rounded text-sm hover:bg-purple-200"
-                          onClick={() => alert("アレンジ機能は後で実装")}
-                        >
-                          アレンジ
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))
             )}
           </div>
+
+          {/* プラットフォーム選択 */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">対象プラットフォーム</label>
+            <div className="flex flex-wrap gap-4">
+              {PLATFORMS.map((platform) => (
+                <label key={platform.id} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedPlatforms.includes(platform.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedPlatforms([...selectedPlatforms, platform.id]);
+                      } else {
+                        setSelectedPlatforms(selectedPlatforms.filter((p) => p !== platform.id));
+                      }
+                    }}
+                  />
+                  <span>{platform.name}</span>
+                  <span className="text-xs text-gray-500">({platform.aspectRatio})</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* 生成ボタン */}
+          <button
+            onClick={handleGenerate}
+            disabled={isGenerating || !originalText.trim()}
+            className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+          >
+            {isGenerating ? "生成中..." : "投稿を生成する"}
+          </button>
         </div>
-      </main>
+
+        {/* 結果エリア */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {PLATFORMS.filter((p) => selectedPlatforms.includes(p.id)).map((platform) => (
+            <div key={platform.id} className="bg-white rounded-lg shadow p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">
+                  {platform.name}
+                  <span className="text-sm font-normal text-gray-500 ml-2">
+                    ({platform.aspectRatio})
+                  </span>
+                </h3>
+                <span className="text-xs text-gray-500">{platform.description}</span>
+              </div>
+
+              {/* 文章 */}
+              <div className="mb-4">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium">文章</span>
+                  {results[platform.id].text && (
+                    <button
+                      onClick={() => copyToClipboard(results[platform.id].text)}
+                      className="text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      📋 コピー
+                    </button>
+                  )}
+                </div>
+                <div className="bg-gray-50 rounded p-3 min-h-24 text-sm whitespace-pre-wrap">
+                  {results[platform.id].text || "（生成後に表示されます）"}
+                </div>
+              </div>
+
+              {/* 画像 */}
+              {(results[platform.id].croppedImage || results[platform.id].arrangedImage) && (
+                <div className="mb-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-medium">
+                      画像
+                      {results[platform.id].arrangedImage && (
+                        <span className="ml-2 text-xs text-green-600">（アレンジ済み）</span>
+                      )}
+                    </span>
+                    <button
+                      onClick={() =>
+                        downloadImage(
+                          results[platform.id].arrangedImage || results[platform.id].croppedImage!,
+                          `${platform.id}_${Date.now()}.jpg`
+                        )
+                      }
+                      className="text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      💾 保存
+                    </button>
+                  </div>
+                  <img
+                    src={results[platform.id].arrangedImage || results[platform.id].croppedImage}
+                    alt={`${platform.name}用画像`}
+                    className="w-full rounded"
+                  />
+                </div>
+              )}
+
+              {/* アレンジ機能 */}
+              {results[platform.id].croppedImage && (
+                <div className="border-t pt-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-medium">画像アレンジ（AI）</span>
+                    <span className="text-xs text-orange-600">※約6円/回</span>
+                  </div>
+                  <textarea
+                    value={arrangePrompts[platform.id]}
+                    onChange={(e) =>
+                      setArrangePrompts((prev) => ({
+                        ...prev,
+                        [platform.id]: e.target.value,
+                      }))
+                    }
+                    placeholder="編集指示を入力..."
+                    className="w-full h-20 px-3 py-2 border rounded-lg resize-none text-sm mb-2"
+                  />
+                  <button
+                    onClick={() => handleArrangeImage(platform.id)}
+                    disabled={arrangingPlatform !== null}
+                    className="w-full py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 text-sm"
+                  >
+                    {arrangingPlatform === platform.id ? "アレンジ中..." : "🎨 アレンジ実行"}
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
