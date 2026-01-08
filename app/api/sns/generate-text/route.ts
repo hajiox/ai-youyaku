@@ -1,4 +1,4 @@
-// /app/api/sns/generate-text/route.ts ver.3
+// /app/api/sns/generate-text/route.ts ver.4
 import { NextRequest, NextResponse } from "next/server";
 
 type Platform = "x" | "instagram" | "story" | "threads";
@@ -12,7 +12,8 @@ const PROMPTS: Record<Platform, (text: string, linkUrl?: string) => string> = {
     prompt += "- ハッシュタグは1-2個程度、末尾に配置\n";
     prompt += "- URLがある場合は末尾に配置\n";
     prompt += "- 絵文字は控えめに（0-2個）\n";
-    prompt += "- 他のSNS投稿とダブルポストに見えないよう、独自の切り口・文体で書く\n\n";
+    prompt += "- 他のSNS投稿とダブルポストに見えないよう、独自の切り口・文体で書く\n";
+    prompt += "- 必ず文章を完結させること（途中で終わらない）\n\n";
     prompt += "【元の文章】\n" + text + "\n\n";
     if (linkUrl) {
       prompt += "【挿入するURL】\n" + linkUrl + "\n\n";
@@ -77,8 +78,8 @@ async function callGeminiAPI(prompt: string): Promise<string> {
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.8,
-        maxOutputTokens: 2048,
+        temperature: 0.7,
+        maxOutputTokens: 4096,
       },
     }),
   });
