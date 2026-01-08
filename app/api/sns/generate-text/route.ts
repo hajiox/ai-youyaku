@@ -1,8 +1,5 @@
-// /app/api/sns/generate-text/route.ts ver.2
+// /app/api/sns/generate-text/route.ts ver.3
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 type Platform = "x" | "instagram" | "story" | "threads";
 
@@ -67,6 +64,35 @@ const PROMPTS: Record<Platform, (text: string, linkUrl?: string) => string> = {
   },
 };
 
+async function callGeminiAPI(prompt: string): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY環境変数が設定されていません");
+
+  const modelName = "gemini-2.5-flash";
+  const apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + modelName + ":generateContent?key=" + apiKey;
+
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.8,
+        maxOutputTokens: 2048,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Gemini API error:", response.status, errorText);
+    throw new Error("AI API error: " + response.status);
+  }
+
+  const data = await response.json();
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -83,9 +109,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 最新の安定版モデルを使用
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
     const results: Record<string, string> = {
       x: "",
       instagram: "",
@@ -93,20 +116,15 @@ export async function POST(request: NextRequest) {
       threads: "",
     };
 
-    // 順番に生成（レート制限回避）
     for (const platform of platforms) {
       const prompt = PROMPTS[platform](originalText, linkUrl);
       try {
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+        const text = await callGeminiAPI(prompt);
         results[platform] = text.trim();
       } catch (err) {
         console.error("Error generating " + platform + ":", err);
         results[platform] = "【生成エラー】" + platform + "用の文章を生成できませんでした";
       }
-      // レート制限回避のため500ms待機
-      await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
     return NextResponse.json(results);
