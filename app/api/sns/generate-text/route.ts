@@ -1,4 +1,4 @@
-// /app/api/sns/generate-text/route.ts ver.4
+// /app/api/sns/generate-text/route.ts ver.5
 import { NextRequest, NextResponse } from "next/server";
 
 type Platform = "x" | "instagram" | "story" | "threads";
@@ -65,7 +65,7 @@ const PROMPTS: Record<Platform, (text: string, linkUrl?: string) => string> = {
   },
 };
 
-async function callGeminiAPI(prompt: string): Promise<string> {
+async function callGeminiAPI(prompt: string, retryCount: number = 0): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY環境変数が設定されていません");
 
@@ -87,6 +87,14 @@ async function callGeminiAPI(prompt: string): Promise<string> {
   if (!response.ok) {
     const errorText = await response.text();
     console.error("Gemini API error:", response.status, errorText);
+    
+    // 503エラーの場合、最大3回リトライ
+    if (response.status === 503 && retryCount < 3) {
+      console.log("Retrying... attempt " + (retryCount + 1));
+      await new Promise((resolve) => setTimeout(resolve, 2000 * (retryCount + 1)));
+      return callGeminiAPI(prompt, retryCount + 1);
+    }
+    
     throw new Error("AI API error: " + response.status);
   }
 
@@ -124,8 +132,10 @@ export async function POST(request: NextRequest) {
         results[platform] = text.trim();
       } catch (err) {
         console.error("Error generating " + platform + ":", err);
-        results[platform] = "【生成エラー】" + platform + "用の文章を生成できませんでした";
+        results[platform] = "【生成エラー】" + platform + "用の文章を生成できませんでした。再度お試しください。";
       }
+      // 各リクエスト間に少し間隔を空ける
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
     return NextResponse.json(results);
