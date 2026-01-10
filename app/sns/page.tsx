@@ -1,4 +1,4 @@
-// /app/sns/page.tsx ver.3
+// /app/sns/page.tsx ver.4
 "use client";
 
 import { useState, useRef } from "react";
@@ -23,7 +23,6 @@ const PLATFORMS: PlatformConfig[] = [
 interface GeneratedResult {
   text: string;
   croppedImage?: string;
-  arrangedImage?: string;
 }
 
 export default function SNSPage() {
@@ -39,13 +38,6 @@ export default function SNSPage() {
     threads: { text: "" },
   });
   const [isGenerating, setIsGenerating] = useState(false);
-  const [arrangingPlatform, setArrangingPlatform] = useState<Platform | null>(null);
-  const [arrangePrompts, setArrangePrompts] = useState<Record<Platform, string>>({
-    x: "商品はそのまま維持し、背景を木目調のテーブルに変更してください",
-    instagram: "商品はそのまま維持し、背景を白い大理石に変更してください",
-    story: "商品はそのまま維持し、背景をカフェ風に変更してください",
-    threads: "商品はそのまま維持し、背景をキッチンカウンターに変更してください",
-  });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // クロップ関数（Canvas API使用、無料）
@@ -126,7 +118,6 @@ export default function SNSPage() {
           newResults[platform.id] = {
             ...newResults[platform.id],
             croppedImage: cropped,
-            arrangedImage: undefined,
           };
         } catch (err) {
           console.error(`Error cropping for ${platform.id}:`, err);
@@ -180,66 +171,6 @@ export default function SNSPage() {
     }
   };
 
-  // 画像アレンジ（AI使用、有料）
-  const handleArrangeImage = async (platform: Platform) => {
-    const croppedImage = results[platform].croppedImage;
-    if (!croppedImage) {
-      alert("先に画像をアップロードしてください");
-      return;
-    }
-
-    const prompt = arrangePrompts[platform];
-    if (!prompt.trim()) {
-      alert("プロンプトを入力してください");
-      return;
-    }
-
-    const confirmed = confirm(
-      `画像アレンジを実行しますか？\n\n` +
-      `プロンプト: ${prompt}\n\n` +
-      `※ 約6円/回のAPI料金が発生します`
-    );
-
-    if (!confirmed) return;
-
-    setArrangingPlatform(platform);
-
-    try {
-      const response = await fetch("/api/sns/arrange-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageBase64: croppedImage,
-          prompt,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "画像編集に失敗しました");
-      }
-
-      const data = await response.json();
-
-      if (data.success && data.imageBase64) {
-        setResults((prev) => ({
-          ...prev,
-          [platform]: {
-            ...prev[platform],
-            arrangedImage: data.imageBase64,
-          },
-        }));
-      } else {
-        throw new Error("画像が生成されませんでした");
-      }
-    } catch (error) {
-      console.error("Arrange error:", error);
-      alert(error instanceof Error ? error.message : "画像編集中にエラーが発生しました");
-    } finally {
-      setArrangingPlatform(null);
-    }
-  };
-
   // クリア機能
   const handleClear = () => {
     const confirmed = confirm("入力内容と生成結果をすべてクリアしますか？");
@@ -253,12 +184,6 @@ export default function SNSPage() {
       instagram: { text: "" },
       story: { text: "" },
       threads: { text: "" },
-    });
-    setArrangePrompts({
-      x: "商品はそのまま維持し、背景を木目調のテーブルに変更してください",
-      instagram: "商品はそのまま維持し、背景を白い大理石に変更してください",
-      story: "商品はそのまま維持し、背景をカフェ風に変更してください",
-      threads: "商品はそのまま維持し、背景をキッチンカウンターに変更してください",
     });
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -443,19 +368,14 @@ export default function SNSPage() {
               </div>
 
               {/* 画像 */}
-              {(results[platform.id].croppedImage || results[platform.id].arrangedImage) && (
-                <div className="mb-4">
+              {results[platform.id].croppedImage && (
+                <div>
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-medium">
-                      画像
-                      {results[platform.id].arrangedImage && (
-                        <span className="ml-2 text-xs text-green-600">（アレンジ済み）</span>
-                      )}
-                    </span>
+                    <span className="text-sm font-medium">画像</span>
                     <button
                       onClick={() =>
                         downloadImage(
-                          results[platform.id].arrangedImage || results[platform.id].croppedImage!,
+                          results[platform.id].croppedImage!,
                           `${platform.id}_${Date.now()}.jpg`
                         )
                       }
@@ -465,38 +385,10 @@ export default function SNSPage() {
                     </button>
                   </div>
                   <img
-                    src={results[platform.id].arrangedImage || results[platform.id].croppedImage}
+                    src={results[platform.id].croppedImage}
                     alt={`${platform.name}用画像`}
                     className="w-full rounded"
                   />
-                </div>
-              )}
-
-              {/* アレンジ機能 */}
-              {results[platform.id].croppedImage && (
-                <div className="border-t pt-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-medium">画像アレンジ（AI）</span>
-                    <span className="text-xs text-orange-600">※約6円/回</span>
-                  </div>
-                  <textarea
-                    value={arrangePrompts[platform.id]}
-                    onChange={(e) =>
-                      setArrangePrompts((prev) => ({
-                        ...prev,
-                        [platform.id]: e.target.value,
-                      }))
-                    }
-                    placeholder="編集指示を入力..."
-                    className="w-full h-20 px-3 py-2 border rounded-lg resize-none text-sm mb-2"
-                  />
-                  <button
-                    onClick={() => handleArrangeImage(platform.id)}
-                    disabled={arrangingPlatform !== null}
-                    className="w-full py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 text-sm"
-                  >
-                    {arrangingPlatform === platform.id ? "アレンジ中..." : "🎨 アレンジ実行"}
-                  </button>
                 </div>
               )}
             </div>
