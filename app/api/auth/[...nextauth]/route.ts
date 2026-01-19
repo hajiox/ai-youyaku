@@ -13,11 +13,10 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async session({ session, token }) {
-      // 既存のデータベースIDと一致させる
-      if (session?.user) {
-        session.user.id = '065c6f7d-8f75-485c-a77c-bba493443e1e';
+      if (session?.user && token?.sub) {
+        session.user.id = token.sub;
       }
-      return session
+      return session;
     },
   },
   pages: {

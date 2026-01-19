@@ -1,5 +1,6 @@
 // /app/api/admin-auth/route.ts ver.1
 import { NextRequest, NextResponse } from 'next/server';
+import { getAdminAuthCookieName, getAdminAuthToken } from '@/lib/adminAuth';
 
 export const runtime = 'edge';
 
@@ -13,7 +14,20 @@ export async function POST(req: NextRequest) {
     }
 
     if (password === correctPassword) {
-      return NextResponse.json({ success: true });
+      const response = NextResponse.json({ success: true });
+      const token = getAdminAuthToken();
+
+      response.cookies.set({
+        name: getAdminAuthCookieName(),
+        value: token,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 6,
+      });
+
+      return response;
     } else {
       return NextResponse.json({ error: '認証失敗' }, { status: 401 });
     }

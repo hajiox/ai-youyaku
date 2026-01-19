@@ -1,5 +1,7 @@
 // /app/api/manual-products/metadata/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { isAdminRequest } from "@/lib/adminAuth";
+import { assertSafeUrl } from "@/lib/ssrf";
 
 export const runtime = "nodejs";
 
@@ -60,6 +62,9 @@ const formatPrice = (price?: string | number, currency?: string) => {
 };
 
 export async function GET(req: NextRequest) {
+  if (!isAdminRequest(req)) {
+    return NextResponse.json({ error: "認証が必要です" }, { status: 401 });
+  }
   const { searchParams } = new URL(req.url);
   const targetUrl = searchParams.get("url");
 
@@ -68,7 +73,12 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const response = await fetch(targetUrl, {
+    const safetyCheck = await assertSafeUrl(targetUrl);
+    if (!safetyCheck.ok) {
+      return NextResponse.json({ error: safetyCheck.error }, { status: 400 });
+    }
+
+    const response = await fetch(safetyCheck.url.toString(), {
       headers: {
         "Accept-Language": "ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7",
         "User-Agent": "Mozilla/5.0 (compatible; ProductMetaFetcher/1.0)",

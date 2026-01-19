@@ -1,6 +1,7 @@
 // /app/api/manual-products/route.ts ver.1
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { isAdminRequest } from '@/lib/adminAuth';
 
 // Supabaseクライアントの作成
 const supabase = createClient(
@@ -29,7 +30,10 @@ export async function GET() {
 }
 
 // データ保存（POST）
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  if (!isAdminRequest(req)) {
+    return NextResponse.json({ error: '認証が必要です' }, { status: 401 });
+  }
   try {
     const body = await req.json();
     const { products } = body;

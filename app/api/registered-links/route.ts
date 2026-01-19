@@ -1,6 +1,7 @@
 // /app/api/registered-links/route.ts ver.1
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { isAdminRequest } from '@/lib/adminAuth';
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -29,6 +30,9 @@ export async function GET() {
 
 // リンク追加（POST）
 export async function POST(req: NextRequest) {
+  if (!isAdminRequest(req)) {
+    return NextResponse.json({ error: '認証が必要です' }, { status: 401 });
+  }
   try {
     const body = await req.json();
     const { url, title, description, ogp_image_url } = body;
@@ -65,6 +69,9 @@ export async function POST(req: NextRequest) {
 
 // リンク削除（DELETE）
 export async function DELETE(req: NextRequest) {
+  if (!isAdminRequest(req)) {
+    return NextResponse.json({ error: '認証が必要です' }, { status: 401 });
+  }
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
