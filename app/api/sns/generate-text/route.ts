@@ -1,5 +1,9 @@
 // /app/api/sns/generate-text/route.ts ver.5
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+
+export const runtime = "nodejs";
 
 type Platform = "x" | "instagram" | "story" | "threads";
 
@@ -104,6 +108,11 @@ async function callGeminiAPI(prompt: string, retryCount: number = 0): Promise<st
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "認証が必要です" }, { status: 401 });
+    }
+
     const body = await request.json();
     const { originalText, platforms, linkUrl } = body as {
       originalText: string;

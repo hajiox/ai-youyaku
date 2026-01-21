@@ -1,8 +1,11 @@
 // /app/api/summary/route.ts ver.22 - Gemini 2.5 Flash (標準版) 採用
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { assertSafeUrl } from "@/lib/ssrf";
 import { buildMessagesForGemini } from "@/lib/buildMessages";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 const MAX_INPUT_CHAR_LENGTH = 15000;
 
@@ -14,7 +17,12 @@ async function fetchUrlContent(url: string): Promise<{
   error?: string 
 }> {
   try {
-    const response = await fetch(url, {
+    const safetyCheck = await assertSafeUrl(url);
+    if (!safetyCheck.ok) {
+      return { content: null, truncated: false, originalLength: 0, error: safetyCheck.error };
+    }
+
+    const response = await fetch(safetyCheck.url.toString(), {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
@@ -109,6 +117,11 @@ async function callGeminiAPI(prompt: string): Promise<string> {
 // POSTハンドラ
 export async function POST(req: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "認証が必要です" }, { status: 401 });
+    }
+
     const body = await req.json();
     const { url, tone, toneSample } = body;
 
