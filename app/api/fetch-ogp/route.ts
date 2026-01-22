@@ -1,9 +1,14 @@
 // /app/api/fetch-ogp/route.ts ver.1
 import { NextRequest, NextResponse } from 'next/server';
+import { isAdminRequest } from '@/lib/adminAuth';
+import { assertSafeUrl } from '@/lib/ssrf';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  if (!isAdminRequest(req)) {
+    return NextResponse.json({ error: '認証が必要です' }, { status: 401 });
+  }
   try {
     const { url } = await req.json();
 
@@ -11,8 +16,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'URLが必要です' }, { status: 400 });
     }
 
+    const safetyCheck = await assertSafeUrl(url);
+    if (!safetyCheck.ok) {
+      return NextResponse.json({ error: safetyCheck.error }, { status: 400 });
+    }
+
     // URLからHTMLを取得
-    const response = await fetch(url, {
+    const response = await fetch(safetyCheck.url.toString(), {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
