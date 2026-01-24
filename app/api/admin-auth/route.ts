@@ -9,11 +9,18 @@ export async function POST(req: NextRequest) {
   try {
     const ip =
       req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      req.headers.get('x-real-ip') ||
       req.ip ||
-      'unknown';
+      `unknown:${req.headers.get('user-agent') || ''}`;
     const limitResult = checkRateLimit(`admin-auth:${ip}`, 10, 60_000);
     if (!limitResult.ok) {
-      return NextResponse.json({ error: 'Too Many Requests' }, { status: 429 });
+      return NextResponse.json(
+        { error: 'Too Many Requests' },
+        {
+          status: 429,
+          headers: { 'Retry-After': String(limitResult.retryAfterSec) },
+        }
+      );
     }
 
     const { password } = await req.json();
