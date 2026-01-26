@@ -11,7 +11,7 @@
   "none": "removed",
   "engines": {
     "node": "20.x",
-    "pnpm": "8.x"
+    
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
