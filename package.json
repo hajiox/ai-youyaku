@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint"
   },
-  "packageManager": "npm@10.0.0",
+  "none": "removed",
   "engines": {
     "node": "20.x",
     "pnpm": "8.x"
