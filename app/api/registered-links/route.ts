@@ -1,13 +1,8 @@
 // /app/api/registered-links/route.ts ver.1
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
 import { isAdminRequest } from '@/lib/adminAuth';
 import { enforceSameOriginForMutation } from '@/lib/originGuard';
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_ANON_KEY!
-);
 
 export const runtime = 'edge';
 

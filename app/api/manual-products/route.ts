@@ -1,14 +1,8 @@
 // /app/api/manual-products/route.ts ver.1
 import { NextResponse, NextRequest } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
 import { isAdminRequest } from '@/lib/adminAuth';
 import { enforceSameOriginForMutation } from '@/lib/originGuard';
-
-// Supabaseクライアントの作成
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_ANON_KEY!
-);
 
 export const runtime = 'edge';
 
