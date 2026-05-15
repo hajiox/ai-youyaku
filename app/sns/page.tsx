@@ -31,6 +31,7 @@ type OutputFormat = "image/jpeg" | "image/png" | "image/webp";
 type ResizeMode = "contain" | "cover" | "stretch";
 type DimensionUnit = "px" | "%";
 type SizeUnit = "kb" | "%";
+type ConvertSource = "file" | "drop" | "paste";
 
 interface ConvertedImage {
   dataUrl: string;
@@ -80,6 +81,37 @@ const dataUrlToBytes = (dataUrl: string) => {
   return Math.round((base64.length * 3) / 4);
 };
 
+const sanitizeFilenamePart = (value: string) => {
+  return value
+    .replace(/\.[^.]+$/, "")
+    .normalize("NFKC")
+    .replace(/[\\/:*?"<>|]+/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    || "image";
+};
+
+const formatSerial = (index: number) => String(index + 1).padStart(3, "0");
+
+const buildConvertedFilename = (
+  file: File,
+  source: ConvertSource,
+  width: number,
+  height: number,
+  extension: string,
+  index: number
+) => {
+  const sizePart = `${width}x${height}`;
+  const serial = formatSerial(index);
+
+  if (source === "file") {
+    return `${sanitizeFilenamePart(file.name)}_${sizePart}_${serial}.${extension}`;
+  }
+
+  return `${sizePart}_${serial}.${extension}`;
+};
+
 const resolveDimension = (value: number, unit: DimensionUnit, originalValue: number) => {
   if (unit === "%") return Math.max(1, Math.round((originalValue * value) / 100));
   return Math.max(1, Math.round(value));
@@ -117,6 +149,8 @@ const convertImageFile = async (
     format: OutputFormat;
     mode: ResizeMode;
     background: string;
+    source: ConvertSource;
+    serialIndex: number;
   }
 ): Promise<ConvertedImage> => {
   const source = await loadImageFromFile(file);
@@ -180,11 +214,10 @@ const convertImageFile = async (
   }
 
   const selectedFormat = FORMAT_OPTIONS.find((format) => format.value === options.format) || FORMAT_OPTIONS[0];
-  const baseName = file.name.replace(/\.[^.]+$/, "") || "converted-image";
 
   return {
     dataUrl,
-    filename: `${baseName}_${targetWidth}x${targetHeight}.${selectedFormat.extension}`,
+    filename: buildConvertedFilename(file, options.source, targetWidth, targetHeight, selectedFormat.extension, options.serialIndex),
     mimeType: options.format,
     width: targetWidth,
     height: targetHeight,
@@ -401,7 +434,7 @@ export default function SNSPage() {
     link.click();
   };
 
-  const handleConvertFiles = async (fileList: FileList | File[]) => {
+  const handleConvertFiles = async (fileList: FileList | File[], source: ConvertSource) => {
     const files = Array.from(fileList).filter((file) => file.type.startsWith("image/"));
     if (!files.length) {
       setConverterError("画像ファイルを選択してください");
@@ -425,6 +458,8 @@ export default function SNSPage() {
             format: outputFormat,
             mode: resizeMode,
             background: backgroundColor,
+            source,
+            serialIndex: index,
           });
 
         downloadImage(converted.dataUrl, converted.filename);
@@ -447,14 +482,14 @@ export default function SNSPage() {
 
   const handleConverterInput = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (files) handleConvertFiles(files);
+    if (files) handleConvertFiles(files, "file");
   };
 
   const handlePasteImages = (clipboardData: DataTransfer) => {
     const files = Array.from(clipboardData.files).filter((file) => file.type.startsWith("image/"));
 
     if (files.length > 0) {
-      handleConvertFiles(files);
+      handleConvertFiles(files, "paste");
       return true;
     }
 
@@ -464,7 +499,7 @@ export default function SNSPage() {
       .filter((file): file is File => Boolean(file));
 
     if (itemFiles.length > 0) {
-      handleConvertFiles(itemFiles);
+      handleConvertFiles(itemFiles, "paste");
       return true;
     }
 
@@ -474,7 +509,7 @@ export default function SNSPage() {
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setIsDragging(false);
-    handleConvertFiles(event.dataTransfer.files);
+    handleConvertFiles(event.dataTransfer.files, "drop");
   };
 
   const applySavedSetting = (setting: SavedConverterSetting) => {
