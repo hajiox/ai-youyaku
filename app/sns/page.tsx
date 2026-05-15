@@ -69,14 +69,6 @@ const FORMAT_OPTIONS: { value: OutputFormat; label: string; extension: string }[
   { value: "image/png", label: "PNG", extension: "png" },
 ];
 
-const PRESETS = [
-  { label: "Instagram正方形", width: 1080, height: 1080, maxKb: 500 },
-  { label: "Instagramストーリー", width: 1080, height: 1920, maxKb: 800 },
-  { label: "X横長", width: 1200, height: 675, maxKb: 700 },
-  { label: "OGP", width: 1200, height: 630, maxKb: 500 },
-  { label: "LINEリッチ", width: 1040, height: 1040, maxKb: 1000 },
-];
-
 const formatBytes = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -485,15 +477,6 @@ export default function SNSPage() {
     handleConvertFiles(event.dataTransfer.files);
   };
 
-  const applyPreset = (preset: (typeof PRESETS)[number]) => {
-    setConvertWidth(preset.width);
-    setConvertWidthUnit("px");
-    setConvertHeight(preset.height);
-    setConvertHeightUnit("px");
-    setMaxSize(preset.maxKb);
-    setMaxSizeUnit("kb");
-  };
-
   const applySavedSetting = (setting: SavedConverterSetting) => {
     setConvertWidth(setting.width);
     setConvertWidthUnit(setting.widthUnit);
@@ -584,7 +567,7 @@ export default function SNSPage() {
   if (!session) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <h1 className="text-2xl font-bold">SNS投稿最適化ツール</h1>
+        <h1 className="text-2xl font-bold">画像変換ツール</h1>
         <p className="text-gray-600">ログインして利用を開始してください</p>
         <button
           onClick={() => signIn("google")}
@@ -601,8 +584,17 @@ export default function SNSPage() {
       <div className="max-w-6xl mx-auto px-4">
         {/* ヘッダー */}
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-bold">SNS投稿最適化ツール</h1>
+          <h1 className="text-2xl font-bold">
+            {activeTool === "converter" ? "画像変換ツール" : "SNS投稿最適化ツール"}
+          </h1>
           <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => setActiveTool(activeTool === "converter" ? "optimizer" : "converter")}
+              className="text-sm text-blue-600 hover:text-blue-800"
+            >
+              {activeTool === "converter" ? "SNS投稿最適化へ" : "画像変換へ"}
+            </button>
             <span className="text-sm text-gray-600">{session.user?.email}</span>
             <button
               onClick={() => signOut()}
@@ -611,32 +603,6 @@ export default function SNSPage() {
               ログアウト
             </button>
           </div>
-        </div>
-
-        {/* タブ */}
-        <div className="mb-6 inline-flex rounded-lg border bg-white p-1 shadow-sm">
-          <button
-            type="button"
-            onClick={() => setActiveTool("converter")}
-            className={`rounded-md px-4 py-2 text-sm font-medium transition ${
-              activeTool === "converter"
-                ? "bg-blue-600 text-white"
-                : "text-gray-600 hover:bg-gray-100"
-            }`}
-          >
-            画像変換
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTool("optimizer")}
-            className={`rounded-md px-4 py-2 text-sm font-medium transition ${
-              activeTool === "optimizer"
-                ? "bg-blue-600 text-white"
-                : "text-gray-600 hover:bg-gray-100"
-            }`}
-          >
-            SNS投稿最適化
-          </button>
         </div>
 
         {activeTool === "converter" && (
@@ -975,25 +941,6 @@ export default function SNSPage() {
                   </div>
                 </div>
               )}
-
-              <div className="mb-5">
-                <label className="block text-sm font-medium mb-2">プリセット</label>
-                <div className="grid grid-cols-1 gap-2">
-                  {PRESETS.map((preset) => (
-                    <button
-                      key={preset.label}
-                      type="button"
-                      onClick={() => applyPreset(preset)}
-                      className="rounded-lg border border-gray-200 px-3 py-2 text-left text-sm hover:bg-gray-50"
-                    >
-                      <span className="font-medium">{preset.label}</span>
-                      <span className="ml-2 text-xs text-gray-500">
-                        {preset.width}x{preset.height} / {preset.maxKb}KB
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
 
               <button
                 type="button"
