@@ -1,8 +1,9 @@
-// /app/sns/page.tsx ver.4
+// /app/sns/page.tsx ver.5
 "use client";
 
-import { useState, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
+import { Download, ImageIcon, Loader2, RotateCcw, UploadCloud } from "lucide-react";
 
 type Platform = "x" | "instagram" | "story" | "threads";
 
@@ -25,8 +26,153 @@ interface GeneratedResult {
   croppedImage?: string;
 }
 
+type ActiveTool = "optimizer" | "converter";
+type OutputFormat = "image/jpeg" | "image/png" | "image/webp";
+type ResizeMode = "contain" | "cover" | "stretch";
+
+interface ConvertedImage {
+  dataUrl: string;
+  filename: string;
+  mimeType: OutputFormat;
+  width: number;
+  height: number;
+  sizeBytes: number;
+  quality: number;
+  originalName: string;
+  originalWidth: number;
+  originalHeight: number;
+  originalSizeBytes: number;
+}
+
+const FORMAT_OPTIONS: { value: OutputFormat; label: string; extension: string }[] = [
+  { value: "image/jpeg", label: "JPEG", extension: "jpg" },
+  { value: "image/webp", label: "WebP", extension: "webp" },
+  { value: "image/png", label: "PNG", extension: "png" },
+];
+
+const PRESETS = [
+  { label: "Instagram正方形", width: 1080, height: 1080, maxKb: 500 },
+  { label: "Instagramストーリー", width: 1080, height: 1920, maxKb: 800 },
+  { label: "X横長", width: 1200, height: 675, maxKb: 700 },
+  { label: "OGP", width: 1200, height: 630, maxKb: 500 },
+  { label: "LINEリッチ", width: 1040, height: 1040, maxKb: 1000 },
+];
+
+const formatBytes = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+};
+
+const dataUrlToBytes = (dataUrl: string) => {
+  const base64 = dataUrl.split(",")[1] || "";
+  return Math.round((base64.length * 3) / 4);
+};
+
+const loadImageFromFile = (file: File): Promise<{ dataUrl: string; width: number; height: number }> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const img = new Image();
+      img.onload = () => resolve({ dataUrl, width: img.naturalWidth, height: img.naturalHeight });
+      img.onerror = () => reject(new Error("画像の読み込みに失敗しました"));
+      img.src = dataUrl;
+    };
+    reader.onerror = () => reject(new Error("ファイルの読み込みに失敗しました"));
+    reader.readAsDataURL(file);
+  });
+};
+
+const convertImageFile = async (
+  file: File,
+  options: {
+    width: number;
+    height: number;
+    maxKb: number;
+    format: OutputFormat;
+    mode: ResizeMode;
+    background: string;
+  }
+): Promise<ConvertedImage> => {
+  const source = await loadImageFromFile(file);
+  const img = new Image();
+
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("画像の描画に失敗しました"));
+    img.src = source.dataUrl;
+  });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = options.width;
+  canvas.height = options.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvasを利用できません");
+
+  ctx.fillStyle = options.background || "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const sourceRatio = source.width / source.height;
+  const targetRatio = options.width / options.height;
+
+  let drawWidth = options.width;
+  let drawHeight = options.height;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  if (options.mode !== "stretch") {
+    const shouldFitWidth =
+      options.mode === "contain" ? sourceRatio > targetRatio : sourceRatio < targetRatio;
+
+    if (shouldFitWidth) {
+      drawWidth = options.width;
+      drawHeight = options.width / sourceRatio;
+    } else {
+      drawHeight = options.height;
+      drawWidth = options.height * sourceRatio;
+    }
+
+    offsetX = (options.width - drawWidth) / 2;
+    offsetY = (options.height - drawHeight) / 2;
+  }
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+
+  let quality = options.format === "image/png" ? 1 : 0.92;
+  let dataUrl = canvas.toDataURL(options.format, quality);
+  const maxBytes = options.maxKb * 1024;
+
+  if (options.format !== "image/png") {
+    while (dataUrlToBytes(dataUrl) > maxBytes && quality > 0.14) {
+      quality = Math.max(0.12, quality - 0.06);
+      dataUrl = canvas.toDataURL(options.format, quality);
+    }
+  }
+
+  const selectedFormat = FORMAT_OPTIONS.find((format) => format.value === options.format) || FORMAT_OPTIONS[0];
+  const baseName = file.name.replace(/\.[^.]+$/, "") || "converted-image";
+
+  return {
+    dataUrl,
+    filename: `${baseName}_${options.width}x${options.height}.${selectedFormat.extension}`,
+    mimeType: options.format,
+    width: options.width,
+    height: options.height,
+    sizeBytes: dataUrlToBytes(dataUrl),
+    quality,
+    originalName: file.name,
+    originalWidth: source.width,
+    originalHeight: source.height,
+    originalSizeBytes: file.size,
+  };
+};
+
 export default function SNSPage() {
   const { data: session, status } = useSession();
+  const [activeTool, setActiveTool] = useState<ActiveTool>("optimizer");
   const [originalText, setOriginalText] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>(["x", "instagram", "story", "threads"]);
@@ -39,6 +185,22 @@ export default function SNSPage() {
   });
   const [isGenerating, setIsGenerating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const converterInputRef = useRef<HTMLInputElement>(null);
+  const [convertWidth, setConvertWidth] = useState(1200);
+  const [convertHeight, setConvertHeight] = useState(630);
+  const [maxKb, setMaxKb] = useState(500);
+  const [outputFormat, setOutputFormat] = useState<OutputFormat>("image/jpeg");
+  const [resizeMode, setResizeMode] = useState<ResizeMode>("contain");
+  const [backgroundColor, setBackgroundColor] = useState("#ffffff");
+  const [convertedImages, setConvertedImages] = useState<ConvertedImage[]>([]);
+  const [isConverting, setIsConverting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [converterError, setConverterError] = useState("");
+
+  const targetSummary = useMemo(
+    () => `${convertWidth} x ${convertHeight}px / ${maxKb}KB以内`,
+    [convertWidth, convertHeight, maxKb]
+  );
 
   // クロップ関数（Canvas API使用、無料）
   const cropToAspectRatio = (
@@ -204,6 +366,55 @@ export default function SNSPage() {
     link.click();
   };
 
+  const handleConvertFiles = async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList).filter((file) => file.type.startsWith("image/"));
+    if (!files.length) {
+      setConverterError("画像ファイルを選択してください");
+      return;
+    }
+
+    setIsConverting(true);
+    setConverterError("");
+
+    try {
+      const converted = await Promise.all(
+        files.map((file) =>
+          convertImageFile(file, {
+            width: convertWidth,
+            height: convertHeight,
+            maxKb,
+            format: outputFormat,
+            mode: resizeMode,
+            background: backgroundColor,
+          })
+        )
+      );
+      setConvertedImages(converted);
+    } catch (error) {
+      console.error("Convert error:", error);
+      setConverterError(error instanceof Error ? error.message : "画像変換中にエラーが発生しました");
+    } finally {
+      setIsConverting(false);
+    }
+  };
+
+  const handleConverterInput = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files) handleConvertFiles(files);
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDragging(false);
+    handleConvertFiles(event.dataTransfer.files);
+  };
+
+  const applyPreset = (preset: (typeof PRESETS)[number]) => {
+    setConvertWidth(preset.width);
+    setConvertHeight(preset.height);
+    setMaxKb(preset.maxKb);
+  };
+
   // ログイン画面
   if (status === "loading") {
     return (
@@ -245,6 +456,34 @@ export default function SNSPage() {
           </div>
         </div>
 
+        {/* タブ */}
+        <div className="mb-6 inline-flex rounded-lg border bg-white p-1 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setActiveTool("optimizer")}
+            className={`rounded-md px-4 py-2 text-sm font-medium transition ${
+              activeTool === "optimizer"
+                ? "bg-blue-600 text-white"
+                : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            SNS投稿最適化
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTool("converter")}
+            className={`rounded-md px-4 py-2 text-sm font-medium transition ${
+              activeTool === "converter"
+                ? "bg-blue-600 text-white"
+                : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            画像変換
+          </button>
+        </div>
+
+        {activeTool === "optimizer" ? (
+          <>
         {/* 入力エリア */}
         <div className="bg-white rounded-lg shadow p-6 mb-8">
           <div className="flex justify-between items-center mb-4">
@@ -394,6 +633,238 @@ export default function SNSPage() {
             </div>
           ))}
         </div>
+          </>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
+            <div className="bg-white rounded-lg shadow p-6 h-fit">
+              <h2 className="text-lg font-semibold mb-4">変換設定</h2>
+
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">幅(px)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={convertWidth}
+                    onChange={(event) => setConvertWidth(Number(event.target.value) || 1)}
+                    className="w-full rounded-lg border px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">高さ(px)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={convertHeight}
+                    onChange={(event) => setConvertHeight(Number(event.target.value) || 1)}
+                    className="w-full rounded-lg border px-3 py-2"
+                  />
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">上限容量(KB)</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={maxKb}
+                  onChange={(event) => setMaxKb(Number(event.target.value) || 1)}
+                  className="w-full rounded-lg border px-3 py-2"
+                />
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">出力形式</label>
+                <select
+                  value={outputFormat}
+                  onChange={(event) => setOutputFormat(event.target.value as OutputFormat)}
+                  className="w-full rounded-lg border px-3 py-2"
+                >
+                  {FORMAT_OPTIONS.map((format) => (
+                    <option key={format.value} value={format.value}>
+                      {format.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">変形方法</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: "contain", label: "余白" },
+                    { value: "cover", label: "切抜き" },
+                    { value: "stretch", label: "引伸し" },
+                  ].map((mode) => (
+                    <button
+                      key={mode.value}
+                      type="button"
+                      onClick={() => setResizeMode(mode.value as ResizeMode)}
+                      className={`rounded-lg border px-2 py-2 text-sm ${
+                        resizeMode === mode.value
+                          ? "border-blue-600 bg-blue-50 text-blue-700"
+                          : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                      }`}
+                    >
+                      {mode.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {resizeMode === "contain" && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2">余白色</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={backgroundColor}
+                      onChange={(event) => setBackgroundColor(event.target.value)}
+                      className="h-10 w-14 rounded border"
+                    />
+                    <input
+                      type="text"
+                      value={backgroundColor}
+                      onChange={(event) => setBackgroundColor(event.target.value)}
+                      className="min-w-0 flex-1 rounded-lg border px-3 py-2"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="mb-5">
+                <label className="block text-sm font-medium mb-2">プリセット</label>
+                <div className="grid grid-cols-1 gap-2">
+                  {PRESETS.map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => applyPreset(preset)}
+                      className="rounded-lg border border-gray-200 px-3 py-2 text-left text-sm hover:bg-gray-50"
+                    >
+                      <span className="font-medium">{preset.label}</span>
+                      <span className="ml-2 text-xs text-gray-500">
+                        {preset.width}x{preset.height} / {preset.maxKb}KB
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setConvertedImages([]);
+                  setConverterError("");
+                  if (converterInputRef.current) converterInputRef.current.value = "";
+                }}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-700 hover:bg-gray-200"
+              >
+                <RotateCcw className="h-4 w-4" />
+                クリア
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg shadow p-6">
+                <div
+                  onDrop={handleDrop}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  className={`flex min-h-64 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-10 text-center transition ${
+                    isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300 bg-gray-50 hover:bg-gray-100"
+                  }`}
+                  onClick={() => converterInputRef.current?.click()}
+                >
+                  {isConverting ? (
+                    <Loader2 className="mb-4 h-10 w-10 animate-spin text-blue-600" />
+                  ) : (
+                    <UploadCloud className="mb-4 h-10 w-10 text-blue-600" />
+                  )}
+                  <p className="text-lg font-semibold">画像をドロップ</p>
+                  <p className="mt-1 text-sm text-gray-500">{targetSummary} に変換します</p>
+                  <p className="mt-3 text-xs text-gray-400">クリックしてファイル選択もできます。複数枚対応。</p>
+                  <input
+                    ref={converterInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleConverterInput}
+                    className="hidden"
+                  />
+                </div>
+
+                {converterError && (
+                  <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {converterError}
+                  </div>
+                )}
+              </div>
+
+              {convertedImages.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {convertedImages.map((image) => {
+                    const isOverLimit = image.sizeBytes > maxKb * 1024;
+
+                    return (
+                      <div key={`${image.originalName}-${image.filename}`} className="bg-white rounded-lg shadow p-5">
+                        <div className="mb-4 flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="truncate font-semibold">{image.originalName}</h3>
+                            <p className="text-xs text-gray-500">
+                              {image.originalWidth}x{image.originalHeight} / {formatBytes(image.originalSizeBytes)}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => downloadImage(image.dataUrl, image.filename)}
+                            className="flex shrink-0 items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
+                          >
+                            <Download className="h-4 w-4" />
+                            保存
+                          </button>
+                        </div>
+
+                        <div className="mb-4 overflow-hidden rounded-lg border bg-gray-100">
+                          <img src={image.dataUrl} alt={`${image.originalName} 変換後`} className="w-full" />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div className="rounded-lg bg-gray-50 p-3">
+                            <div className="text-xs text-gray-500">サイズ</div>
+                            <div className="font-medium">{image.width} x {image.height}px</div>
+                          </div>
+                          <div className={`rounded-lg p-3 ${isOverLimit ? "bg-amber-50 text-amber-700" : "bg-green-50 text-green-700"}`}>
+                            <div className="text-xs opacity-75">容量</div>
+                            <div className="font-medium">{formatBytes(image.sizeBytes)}</div>
+                          </div>
+                          <div className="rounded-lg bg-gray-50 p-3">
+                            <div className="text-xs text-gray-500">形式</div>
+                            <div className="font-medium">{FORMAT_OPTIONS.find((format) => format.value === image.mimeType)?.label}</div>
+                          </div>
+                          <div className="rounded-lg bg-gray-50 p-3">
+                            <div className="text-xs text-gray-500">品質</div>
+                            <div className="font-medium">{Math.round(image.quality * 100)}%</div>
+                          </div>
+                        </div>
+
+                        {isOverLimit && (
+                          <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                            <ImageIcon className="mt-0.5 h-4 w-4 shrink-0" />
+                            PNGは品質圧縮できないため、上限を超える場合があります。JPEGまたはWebPを選ぶと容量を下げられます。
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
