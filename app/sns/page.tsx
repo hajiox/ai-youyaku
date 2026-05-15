@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
-import { Download, ImageIcon, Loader2, RotateCcw, UploadCloud } from "lucide-react";
+import { Download, Loader2, RotateCcw, UploadCloud } from "lucide-react";
 
 type Platform = "x" | "instagram" | "story" | "threads";
 
@@ -389,7 +389,10 @@ export default function SNSPage() {
           })
         )
       );
-      setConvertedImages(converted);
+      converted.forEach((image, index) => {
+        window.setTimeout(() => downloadImage(image.dataUrl, image.filename), index * 250);
+      });
+      setConvertedImages((current) => [...converted, ...current]);
     } catch (error) {
       console.error("Convert error:", error);
       setConverterError(error instanceof Error ? error.message : "画像変換中にエラーが発生しました");
@@ -826,8 +829,8 @@ export default function SNSPage() {
                     <UploadCloud className="mb-4 h-10 w-10 text-blue-600" />
                   )}
                   <p className="text-lg font-semibold">画像をドロップ / ペースト</p>
-                  <p className="mt-1 text-sm text-gray-500">{targetSummary} に変換します</p>
-                  <p className="mt-3 text-xs text-gray-400">クリックしてファイル選択、またはCtrl+Vで貼り付けできます。複数枚対応。</p>
+                  <p className="mt-1 text-sm text-gray-500">{targetSummary} に変換して自動ダウンロードします</p>
+                  <p className="mt-3 text-xs text-gray-400">クリックしてファイル選択、またはCtrl+Vで貼り付けできます。実行結果は下に残ります。</p>
                   <input
                     ref={converterInputRef}
                     type="file"
@@ -845,38 +848,47 @@ export default function SNSPage() {
                 )}
               </div>
 
-              {convertedImages.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {convertedImages.map((image) => {
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">実行結果</h2>
+                  <span className="text-sm text-gray-500">{convertedImages.length}件</span>
+                </div>
+
+                {convertedImages.length === 0 ? (
+                  <div className="rounded-lg bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+                    変換を実行すると、ダウンロード結果がここに残ります。
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {convertedImages.map((image, index) => {
                     const isOverLimit = image.sizeBytes > maxKb * 1024;
 
                     return (
-                      <div key={`${image.originalName}-${image.filename}`} className="bg-white rounded-lg shadow p-5">
-                        <div className="mb-4 flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <h3 className="truncate font-semibold">{image.originalName}</h3>
-                            <p className="text-xs text-gray-500">
-                              {image.originalWidth}x{image.originalHeight} / {formatBytes(image.originalSizeBytes)}
-                            </p>
+                      <div
+                        key={`${image.originalName}-${image.filename}-${index}`}
+                        className="grid gap-3 rounded-lg border border-gray-200 p-4 text-sm md:grid-cols-[1fr_auto]"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700">
+                              ダウンロード実行済み
+                            </span>
+                            {isOverLimit && (
+                              <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">
+                                上限超過
+                              </span>
+                            )}
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => downloadImage(image.dataUrl, image.filename)}
-                            className="flex shrink-0 items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
-                          >
-                            <Download className="h-4 w-4" />
-                            保存
-                          </button>
+                          <h3 className="mt-2 truncate font-semibold">{image.filename}</h3>
+                          <p className="mt-1 text-xs text-gray-500">
+                            元: {image.originalName} ({image.originalWidth}x{image.originalHeight} / {formatBytes(image.originalSizeBytes)})
+                          </p>
                         </div>
 
-                        <div className="mb-4 overflow-hidden rounded-lg border bg-gray-100">
-                          <img src={image.dataUrl} alt={`${image.originalName} 変換後`} className="w-full" />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="grid grid-cols-2 gap-3 md:min-w-[280px]">
                           <div className="rounded-lg bg-gray-50 p-3">
-                            <div className="text-xs text-gray-500">サイズ</div>
-                            <div className="font-medium">{image.width} x {image.height}px</div>
+                            <div className="text-xs text-gray-500">変換後</div>
+                            <div className="font-medium">{image.width}x{image.height}px</div>
                           </div>
                           <div className={`rounded-lg p-3 ${isOverLimit ? "bg-amber-50 text-amber-700" : "bg-green-50 text-green-700"}`}>
                             <div className="text-xs opacity-75">容量</div>
@@ -891,18 +903,12 @@ export default function SNSPage() {
                             <div className="font-medium">{Math.round(image.quality * 100)}%</div>
                           </div>
                         </div>
-
-                        {isOverLimit && (
-                          <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                            <ImageIcon className="mt-0.5 h-4 w-4 shrink-0" />
-                            PNGは品質圧縮できないため、上限を超える場合があります。JPEGまたはWebPを選ぶと容量を下げられます。
-                          </div>
-                        )}
                       </div>
                     );
                   })}
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
