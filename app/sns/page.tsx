@@ -29,6 +29,8 @@ interface GeneratedResult {
 type ActiveTool = "optimizer" | "converter";
 type OutputFormat = "image/jpeg" | "image/png" | "image/webp";
 type ResizeMode = "contain" | "cover" | "stretch";
+type DimensionUnit = "px" | "%";
+type SizeUnit = "kb" | "%";
 
 interface ConvertedImage {
   dataUrl: string;
@@ -37,12 +39,29 @@ interface ConvertedImage {
   width: number;
   height: number;
   sizeBytes: number;
+  maxSizeBytes: number;
   quality: number;
   originalName: string;
   originalWidth: number;
   originalHeight: number;
   originalSizeBytes: number;
 }
+
+interface SavedConverterSetting {
+  id: string;
+  name: string;
+  width: number;
+  widthUnit: DimensionUnit;
+  height: number;
+  heightUnit: DimensionUnit;
+  maxSize: number;
+  maxSizeUnit: SizeUnit;
+  format: OutputFormat;
+  mode: ResizeMode;
+  background: string;
+}
+
+const SAVED_SETTINGS_KEY = "sns-image-converter-settings";
 
 const FORMAT_OPTIONS: { value: OutputFormat; label: string; extension: string }[] = [
   { value: "image/jpeg", label: "JPEG", extension: "jpg" },
@@ -69,6 +88,16 @@ const dataUrlToBytes = (dataUrl: string) => {
   return Math.round((base64.length * 3) / 4);
 };
 
+const resolveDimension = (value: number, unit: DimensionUnit, originalValue: number) => {
+  if (unit === "%") return Math.max(1, Math.round((originalValue * value) / 100));
+  return Math.max(1, Math.round(value));
+};
+
+const resolveMaxSizeBytes = (value: number, unit: SizeUnit, originalBytes: number) => {
+  if (unit === "%") return Math.max(1, Math.round((originalBytes * value) / 100));
+  return Math.max(1, Math.round(value * 1024));
+};
+
 const loadImageFromFile = (file: File): Promise<{ dataUrl: string; width: number; height: number }> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -88,8 +117,11 @@ const convertImageFile = async (
   file: File,
   options: {
     width: number;
+    widthUnit: DimensionUnit;
     height: number;
-    maxKb: number;
+    heightUnit: DimensionUnit;
+    maxSize: number;
+    maxSizeUnit: SizeUnit;
     format: OutputFormat;
     mode: ResizeMode;
     background: string;
@@ -104,9 +136,13 @@ const convertImageFile = async (
     img.src = source.dataUrl;
   });
 
+  const targetWidth = resolveDimension(options.width, options.widthUnit, source.width);
+  const targetHeight = resolveDimension(options.height, options.heightUnit, source.height);
+  const maxSizeBytes = resolveMaxSizeBytes(options.maxSize, options.maxSizeUnit, file.size);
+
   const canvas = document.createElement("canvas");
-  canvas.width = options.width;
-  canvas.height = options.height;
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvasを利用できません");
 
@@ -114,10 +150,10 @@ const convertImageFile = async (
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const sourceRatio = source.width / source.height;
-  const targetRatio = options.width / options.height;
+  const targetRatio = targetWidth / targetHeight;
 
-  let drawWidth = options.width;
-  let drawHeight = options.height;
+  let drawWidth = targetWidth;
+  let drawHeight = targetHeight;
   let offsetX = 0;
   let offsetY = 0;
 
@@ -126,15 +162,15 @@ const convertImageFile = async (
       options.mode === "contain" ? sourceRatio > targetRatio : sourceRatio < targetRatio;
 
     if (shouldFitWidth) {
-      drawWidth = options.width;
-      drawHeight = options.width / sourceRatio;
+      drawWidth = targetWidth;
+      drawHeight = targetWidth / sourceRatio;
     } else {
-      drawHeight = options.height;
-      drawWidth = options.height * sourceRatio;
+      drawHeight = targetHeight;
+      drawWidth = targetHeight * sourceRatio;
     }
 
-    offsetX = (options.width - drawWidth) / 2;
-    offsetY = (options.height - drawHeight) / 2;
+    offsetX = (targetWidth - drawWidth) / 2;
+    offsetY = (targetHeight - drawHeight) / 2;
   }
 
   ctx.imageSmoothingEnabled = true;
@@ -143,10 +179,9 @@ const convertImageFile = async (
 
   let quality = options.format === "image/png" ? 1 : 0.92;
   let dataUrl = canvas.toDataURL(options.format, quality);
-  const maxBytes = options.maxKb * 1024;
 
   if (options.format !== "image/png") {
-    while (dataUrlToBytes(dataUrl) > maxBytes && quality > 0.14) {
+    while (dataUrlToBytes(dataUrl) > maxSizeBytes && quality > 0.14) {
       quality = Math.max(0.12, quality - 0.06);
       dataUrl = canvas.toDataURL(options.format, quality);
     }
@@ -157,11 +192,12 @@ const convertImageFile = async (
 
   return {
     dataUrl,
-    filename: `${baseName}_${options.width}x${options.height}.${selectedFormat.extension}`,
+    filename: `${baseName}_${targetWidth}x${targetHeight}.${selectedFormat.extension}`,
     mimeType: options.format,
-    width: options.width,
-    height: options.height,
+    width: targetWidth,
+    height: targetHeight,
     sizeBytes: dataUrlToBytes(dataUrl),
+    maxSizeBytes,
     quality,
     originalName: file.name,
     originalWidth: source.width,
@@ -187,8 +223,11 @@ export default function SNSPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const converterInputRef = useRef<HTMLInputElement>(null);
   const [convertWidth, setConvertWidth] = useState(1200);
+  const [convertWidthUnit, setConvertWidthUnit] = useState<DimensionUnit>("px");
   const [convertHeight, setConvertHeight] = useState(630);
-  const [maxKb, setMaxKb] = useState(500);
+  const [convertHeightUnit, setConvertHeightUnit] = useState<DimensionUnit>("px");
+  const [maxSize, setMaxSize] = useState(500);
+  const [maxSizeUnit, setMaxSizeUnit] = useState<SizeUnit>("kb");
   const [outputFormat, setOutputFormat] = useState<OutputFormat>("image/jpeg");
   const [resizeMode, setResizeMode] = useState<ResizeMode>("contain");
   const [backgroundColor, setBackgroundColor] = useState("#ffffff");
@@ -196,10 +235,12 @@ export default function SNSPage() {
   const [isConverting, setIsConverting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [converterError, setConverterError] = useState("");
+  const [settingName, setSettingName] = useState("");
+  const [savedSettings, setSavedSettings] = useState<SavedConverterSetting[]>([]);
 
   const targetSummary = useMemo(
-    () => `${convertWidth} x ${convertHeight}px / ${maxKb}KB以内`,
-    [convertWidth, convertHeight, maxKb]
+    () => `${convertWidth}${convertWidthUnit} x ${convertHeight}${convertHeightUnit} / ${maxSize}${maxSizeUnit === "kb" ? "KB" : "%"}以内`,
+    [convertWidth, convertWidthUnit, convertHeight, convertHeightUnit, maxSize, maxSizeUnit]
   );
 
   // クロップ関数（Canvas API使用、無料）
@@ -381,8 +422,11 @@ export default function SNSPage() {
         files.map((file) =>
           convertImageFile(file, {
             width: convertWidth,
+            widthUnit: convertWidthUnit,
             height: convertHeight,
-            maxKb,
+            heightUnit: convertHeightUnit,
+            maxSize,
+            maxSizeUnit,
             format: outputFormat,
             mode: resizeMode,
             background: backgroundColor,
@@ -435,9 +479,70 @@ export default function SNSPage() {
 
   const applyPreset = (preset: (typeof PRESETS)[number]) => {
     setConvertWidth(preset.width);
+    setConvertWidthUnit("px");
     setConvertHeight(preset.height);
-    setMaxKb(preset.maxKb);
+    setConvertHeightUnit("px");
+    setMaxSize(preset.maxKb);
+    setMaxSizeUnit("kb");
   };
+
+  const applySavedSetting = (setting: SavedConverterSetting) => {
+    setConvertWidth(setting.width);
+    setConvertWidthUnit(setting.widthUnit);
+    setConvertHeight(setting.height);
+    setConvertHeightUnit(setting.heightUnit);
+    setMaxSize(setting.maxSize);
+    setMaxSizeUnit(setting.maxSizeUnit);
+    setOutputFormat(setting.format);
+    setResizeMode(setting.mode);
+    setBackgroundColor(setting.background);
+  };
+
+  const saveCurrentSetting = () => {
+    const name = settingName.trim();
+    if (!name) {
+      alert("設定名を入力してください");
+      return;
+    }
+
+    const setting: SavedConverterSetting = {
+      id: `${Date.now()}`,
+      name,
+      width: convertWidth,
+      widthUnit: convertWidthUnit,
+      height: convertHeight,
+      heightUnit: convertHeightUnit,
+      maxSize,
+      maxSizeUnit,
+      format: outputFormat,
+      mode: resizeMode,
+      background: backgroundColor,
+    };
+
+    setSavedSettings((current) => {
+      const next = [setting, ...current.filter((item) => item.name !== name)];
+      localStorage.setItem(SAVED_SETTINGS_KEY, JSON.stringify(next));
+      return next;
+    });
+    setSettingName("");
+  };
+
+  const deleteSavedSetting = (id: string) => {
+    setSavedSettings((current) => {
+      const next = current.filter((item) => item.id !== id);
+      localStorage.setItem(SAVED_SETTINGS_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(SAVED_SETTINGS_KEY);
+      if (stored) setSavedSettings(JSON.parse(stored));
+    } catch (error) {
+      console.error("Saved settings load error:", error);
+    }
+  }, []);
 
   useEffect(() => {
     if (activeTool !== "converter") return;
@@ -457,7 +562,7 @@ export default function SNSPage() {
 
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [activeTool, convertWidth, convertHeight, maxKb, outputFormat, resizeMode, backgroundColor]);
+  }, [activeTool, convertWidth, convertWidthUnit, convertHeight, convertHeightUnit, maxSize, maxSizeUnit, outputFormat, resizeMode, backgroundColor]);
 
   // ログイン画面
   if (status === "loading") {
@@ -525,6 +630,63 @@ export default function SNSPage() {
             画像変換
           </button>
         </div>
+
+        {activeTool === "converter" && (
+          <div className="mb-6 rounded-lg border bg-white p-4 shadow-sm">
+            <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div className="flex-1">
+                <label className="mb-2 block text-sm font-medium">現在の設定を保存</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={settingName}
+                    onChange={(event) => setSettingName(event.target.value)}
+                    placeholder="例: 楽天商品画像"
+                    className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={saveCurrentSetting}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                  >
+                    保存
+                  </button>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500">
+                {targetSummary} / {FORMAT_OPTIONS.find((format) => format.value === outputFormat)?.label}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {savedSettings.length === 0 ? (
+                <span className="rounded-full bg-gray-100 px-3 py-1.5 text-xs text-gray-500">
+                  保存済み設定はまだありません
+                </span>
+              ) : (
+                savedSettings.map((setting) => (
+                  <div key={setting.id} className="flex items-center overflow-hidden rounded-full border bg-gray-50 text-sm">
+                    <button
+                      type="button"
+                      onClick={() => applySavedSetting(setting)}
+                      className="px-3 py-1.5 hover:bg-blue-50 hover:text-blue-700"
+                    >
+                      {setting.name}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteSavedSetting(setting.id)}
+                      className="border-l px-2 py-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                      aria-label={`${setting.name}を削除`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
 
         {activeTool === "optimizer" ? (
           <>
@@ -685,36 +847,66 @@ export default function SNSPage() {
 
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">幅(px)</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={convertWidth}
-                    onChange={(event) => setConvertWidth(Number(event.target.value) || 1)}
-                    className="w-full rounded-lg border px-3 py-2"
-                  />
+                  <label className="block text-sm font-medium mb-2">幅</label>
+                  <div className="flex">
+                    <input
+                      type="number"
+                      min={1}
+                      value={convertWidth}
+                      onChange={(event) => setConvertWidth(Number(event.target.value) || 1)}
+                      className="min-w-0 flex-1 rounded-l-lg border border-r-0 px-3 py-2"
+                    />
+                    <select
+                      value={convertWidthUnit}
+                      onChange={(event) => setConvertWidthUnit(event.target.value as DimensionUnit)}
+                      className="rounded-r-lg border bg-white px-2 py-2"
+                    >
+                      <option value="px">px</option>
+                      <option value="%">%</option>
+                    </select>
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">高さ(px)</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={convertHeight}
-                    onChange={(event) => setConvertHeight(Number(event.target.value) || 1)}
-                    className="w-full rounded-lg border px-3 py-2"
-                  />
+                  <label className="block text-sm font-medium mb-2">高さ</label>
+                  <div className="flex">
+                    <input
+                      type="number"
+                      min={1}
+                      value={convertHeight}
+                      onChange={(event) => setConvertHeight(Number(event.target.value) || 1)}
+                      className="min-w-0 flex-1 rounded-l-lg border border-r-0 px-3 py-2"
+                    />
+                    <select
+                      value={convertHeightUnit}
+                      onChange={(event) => setConvertHeightUnit(event.target.value as DimensionUnit)}
+                      className="rounded-r-lg border bg-white px-2 py-2"
+                    >
+                      <option value="px">px</option>
+                      <option value="%">%</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">上限容量(KB)</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={maxKb}
-                  onChange={(event) => setMaxKb(Number(event.target.value) || 1)}
-                  className="w-full rounded-lg border px-3 py-2"
-                />
+                <label className="block text-sm font-medium mb-2">上限容量</label>
+                <div className="flex">
+                  <input
+                    type="number"
+                    min={1}
+                    value={maxSize}
+                    onChange={(event) => setMaxSize(Number(event.target.value) || 1)}
+                    className="min-w-0 flex-1 rounded-l-lg border border-r-0 px-3 py-2"
+                  />
+                  <select
+                    value={maxSizeUnit}
+                    onChange={(event) => setMaxSizeUnit(event.target.value as SizeUnit)}
+                    className="rounded-r-lg border bg-white px-2 py-2"
+                  >
+                    <option value="kb">KB</option>
+                    <option value="%">%</option>
+                  </select>
+                </div>
               </div>
 
               <div className="mb-4">
@@ -861,7 +1053,7 @@ export default function SNSPage() {
                 ) : (
                   <div className="space-y-3">
                     {convertedImages.map((image, index) => {
-                    const isOverLimit = image.sizeBytes > maxKb * 1024;
+                    const isOverLimit = image.sizeBytes > image.maxSizeBytes;
 
                     return (
                       <div
@@ -893,6 +1085,7 @@ export default function SNSPage() {
                           <div className={`rounded-lg p-3 ${isOverLimit ? "bg-amber-50 text-amber-700" : "bg-green-50 text-green-700"}`}>
                             <div className="text-xs opacity-75">容量</div>
                             <div className="font-medium">{formatBytes(image.sizeBytes)}</div>
+                            <div className="text-[11px] opacity-75">上限 {formatBytes(image.maxSizeBytes)}</div>
                           </div>
                           <div className="rounded-lg bg-gray-50 p-3">
                             <div className="text-xs text-gray-500">形式</div>
