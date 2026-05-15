@@ -233,6 +233,8 @@ export default function SNSPage() {
   const [backgroundColor, setBackgroundColor] = useState("#ffffff");
   const [convertedImages, setConvertedImages] = useState<ConvertedImage[]>([]);
   const [isConverting, setIsConverting] = useState(false);
+  const [batchDone, setBatchDone] = useState(0);
+  const [batchTotal, setBatchTotal] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [converterError, setConverterError] = useState("");
   const [settingName, setSettingName] = useState("");
@@ -415,12 +417,13 @@ export default function SNSPage() {
     }
 
     setIsConverting(true);
+    setBatchDone(0);
+    setBatchTotal(files.length);
     setConverterError("");
 
     try {
-      const converted = await Promise.all(
-        files.map((file) =>
-          convertImageFile(file, {
+      for (let index = 0; index < files.length; index += 1) {
+        const converted = await convertImageFile(files[index], {
             width: convertWidth,
             widthUnit: convertWidthUnit,
             height: convertHeight,
@@ -430,18 +433,23 @@ export default function SNSPage() {
             format: outputFormat,
             mode: resizeMode,
             background: backgroundColor,
-          })
-        )
-      );
-      converted.forEach((image, index) => {
-        window.setTimeout(() => downloadImage(image.dataUrl, image.filename), index * 250);
-      });
-      setConvertedImages((current) => [...converted, ...current]);
+          });
+
+        downloadImage(converted.dataUrl, converted.filename);
+        setConvertedImages((current) => [converted, ...current]);
+        setBatchDone(index + 1);
+
+        if (index < files.length - 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, 350));
+        }
+      }
     } catch (error) {
       console.error("Convert error:", error);
       setConverterError(error instanceof Error ? error.message : "画像変換中にエラーが発生しました");
     } finally {
       setIsConverting(false);
+      setBatchDone(0);
+      setBatchTotal(0);
     }
   };
 
@@ -1020,9 +1028,13 @@ export default function SNSPage() {
                   ) : (
                     <UploadCloud className="mb-4 h-10 w-10 text-blue-600" />
                   )}
-                  <p className="text-lg font-semibold">画像をドロップ / ペースト</p>
+                  <p className="text-lg font-semibold">
+                    {isConverting && batchTotal > 1
+                      ? `${batchDone + 1 > batchTotal ? batchTotal : batchDone + 1}/${batchTotal} 処理中`
+                      : "画像をドロップ / ペースト"}
+                  </p>
                   <p className="mt-1 text-sm text-gray-500">{targetSummary} に変換して自動ダウンロードします</p>
-                  <p className="mt-3 text-xs text-gray-400">クリックしてファイル選択、またはCtrl+Vで貼り付けできます。実行結果は下に残ります。</p>
+                  <p className="mt-3 text-xs text-gray-400">複数ファイルは1枚ずつ変換して、ZIP化せず個別にダウンロードします。</p>
                   <input
                     ref={converterInputRef}
                     type="file"
