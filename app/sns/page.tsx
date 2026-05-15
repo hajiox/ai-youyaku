@@ -208,7 +208,7 @@ const convertImageFile = async (
 
 export default function SNSPage() {
   const { data: session, status } = useSession();
-  const [activeTool, setActiveTool] = useState<ActiveTool>("optimizer");
+  const [activeTool, setActiveTool] = useState<ActiveTool>("converter");
   const [originalText, setOriginalText] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>(["x", "instagram", "story", "threads"]);
