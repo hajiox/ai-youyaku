@@ -617,17 +617,6 @@ export default function SNSPage() {
         <div className="mb-6 inline-flex rounded-lg border bg-white p-1 shadow-sm">
           <button
             type="button"
-            onClick={() => setActiveTool("optimizer")}
-            className={`rounded-md px-4 py-2 text-sm font-medium transition ${
-              activeTool === "optimizer"
-                ? "bg-blue-600 text-white"
-                : "text-gray-600 hover:bg-gray-100"
-            }`}
-          >
-            SNS投稿最適化
-          </button>
-          <button
-            type="button"
             onClick={() => setActiveTool("converter")}
             className={`rounded-md px-4 py-2 text-sm font-medium transition ${
               activeTool === "converter"
@@ -636,6 +625,17 @@ export default function SNSPage() {
             }`}
           >
             画像変換
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTool("optimizer")}
+            className={`rounded-md px-4 py-2 text-sm font-medium transition ${
+              activeTool === "optimizer"
+                ? "bg-blue-600 text-white"
+                : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            SNS投稿最適化
           </button>
         </div>
 
