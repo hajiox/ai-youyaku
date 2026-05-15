@@ -1,7 +1,7 @@
 // /app/sns/page.tsx ver.5
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { Download, ImageIcon, Loader2, RotateCcw, UploadCloud } from "lucide-react";
 
@@ -403,6 +403,27 @@ export default function SNSPage() {
     if (files) handleConvertFiles(files);
   };
 
+  const handlePasteImages = (clipboardData: DataTransfer) => {
+    const files = Array.from(clipboardData.files).filter((file) => file.type.startsWith("image/"));
+
+    if (files.length > 0) {
+      handleConvertFiles(files);
+      return true;
+    }
+
+    const itemFiles = Array.from(clipboardData.items)
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file));
+
+    if (itemFiles.length > 0) {
+      handleConvertFiles(itemFiles);
+      return true;
+    }
+
+    return false;
+  };
+
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setIsDragging(false);
@@ -414,6 +435,26 @@ export default function SNSPage() {
     setConvertHeight(preset.height);
     setMaxKb(preset.maxKb);
   };
+
+  useEffect(() => {
+    if (activeTool !== "converter") return;
+
+    const onPaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName.toLowerCase();
+      const isTextInput =
+        tagName === "input" || tagName === "textarea" || target?.isContentEditable;
+
+      if (isTextInput) return;
+      if (!event.clipboardData) return;
+
+      const handled = handlePasteImages(event.clipboardData);
+      if (handled) event.preventDefault();
+    };
+
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [activeTool, convertWidth, convertHeight, maxKb, outputFormat, resizeMode, backgroundColor]);
 
   // ログイン画面
   if (status === "loading") {
@@ -784,9 +825,9 @@ export default function SNSPage() {
                   ) : (
                     <UploadCloud className="mb-4 h-10 w-10 text-blue-600" />
                   )}
-                  <p className="text-lg font-semibold">画像をドロップ</p>
+                  <p className="text-lg font-semibold">画像をドロップ / ペースト</p>
                   <p className="mt-1 text-sm text-gray-500">{targetSummary} に変換します</p>
-                  <p className="mt-3 text-xs text-gray-400">クリックしてファイル選択もできます。複数枚対応。</p>
+                  <p className="mt-3 text-xs text-gray-400">クリックしてファイル選択、またはCtrl+Vで貼り付けできます。複数枚対応。</p>
                   <input
                     ref={converterInputRef}
                     type="file"
