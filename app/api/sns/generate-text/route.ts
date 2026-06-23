@@ -7,6 +7,8 @@ export const runtime = "nodejs";
 
 type Platform = "x" | "instagram" | "story" | "threads";
 
+const GEMINI_MODEL_NAME = "gemini-2.5-flash";
+
 const PROMPTS: Record<Platform, (text: string, linkUrl?: string) => string> = {
   x: (text, linkUrl) => {
     let prompt = "以下の文章をX（旧Twitter）プレミアム向けに400文字以内で書き換えてください。\n\n";
@@ -73,8 +75,7 @@ async function callGeminiAPI(prompt: string, retryCount: number = 0): Promise<st
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY環境変数が設定されていません");
 
-  const modelName = "gemini-2.5-flash";
-  const apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + modelName + ":generateContent?key=" + apiKey;
+  const apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + GEMINI_MODEL_NAME + ":generateContent?key=" + apiKey;
 
   const response = await fetch(apiUrl, {
     method: "POST",
@@ -90,7 +91,7 @@ async function callGeminiAPI(prompt: string, retryCount: number = 0): Promise<st
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("Gemini API error:", response.status, errorText);
+    console.error("Gemini API error:", GEMINI_MODEL_NAME, response.status, errorText);
     
     // 503エラーの場合、最大3回リトライ
     if (response.status === 503 && retryCount < 3) {
@@ -99,6 +100,10 @@ async function callGeminiAPI(prompt: string, retryCount: number = 0): Promise<st
       return callGeminiAPI(prompt, retryCount + 1);
     }
     
+    if (response.status === 404) {
+      throw new Error("Gemini model not found: " + GEMINI_MODEL_NAME);
+    }
+
     throw new Error("AI API error: " + response.status);
   }
 

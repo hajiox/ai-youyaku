@@ -233,7 +233,7 @@ const convertImageFile = async (
 
 export default function SNSPage() {
   const { data: session, status } = useSession();
-  const [activeTool, setActiveTool] = useState<ActiveTool>("converter");
+  const [activeTool, setActiveTool] = useState<ActiveTool>("optimizer");
   const [originalText, setOriginalText] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>(["x", "instagram", "story", "threads"]);
@@ -602,7 +602,7 @@ export default function SNSPage() {
   if (!session) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <h1 className="text-2xl font-bold">画像変換ツール</h1>
+        <h1 className="text-2xl font-bold">SNS投稿最適化ツール</h1>
         <p className="text-gray-600">ログインして利用を開始してください</p>
         <button
           onClick={() => signIn("google")}
